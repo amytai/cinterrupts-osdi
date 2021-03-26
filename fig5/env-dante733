@@ -1,0 +1,15 @@
+scripts_dir="/homes/osdi21/osdi21-artifact/cinterrupts-osdi"
+drv_dir="/homes/osdi21/osdi21-artifact/cinterrupts-osdi/linux-kernel/linux-kernel-5.0.0-16.17/drivers/nvme/host"
+
+# for Optane delay is 6, for P3700 delay is 15
+delay=6
+
+# major:minor for the block nvme device /dev/nvme0n1
+bdev="259:0"
+
+# localtion of pcm.x tool
+pcm_dir="/home-local/xrevolver/src/pcm"
+
+# location of fio with barrier
+fio_barrier="/homes/osdi21/osdi21-artifact/cinterrupts-osdi/fio/fio-3.13"
+

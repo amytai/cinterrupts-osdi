@@ -1,0 +1,55 @@
+[global]
+direct=1
+; blocksize=4k
+; runtime=150
+group_reporting=0
+time_based
+; disable all latency/bandwidth statistics measurements
+; gtod_reduce=1
+; do all time measurements in separate thread on dedicated core (core 5)
+; gtod_cpu=5
+; don't care about mapping all blocks, just random
+norandommap=1
+random_generator=lfsr
+; don't measure any bw/t-p
+disable_bw_measurement=1
+disable_bw=1
+disk_util=0
+
+
+; run only on NUMA node local to the device
+cpus_allowed=1
+numa_mem_policy=local
+
+[libaio]
+;iodepth=256
+ioengine=libaio
+rw=randread
+filename=/dev/nvme0n1
+name=raw=random-read-libaio
+size=1G
+numjobs=1
+gtod_reduce=1
+
+; enable batching in io_submit()
+;iodepth_batch_submit=16
+
+; reduce calls to io_getevents() by asking for minimum completions
+;iodepth_batch_complete=16
+;iodepth_batch_complete_min=1
+;iodepth_batch_complete_max=256
+
+[psync]
+iodepth=1
+ioengine=psync
+rw=randread
+; blocksize=512
+filename=/dev/nvme0n1
+name=raw=random-read-psync
+size=1G
+numjobs=1
+gtod_reduce=0
+;disable_lat=0
+;disable_clat=0
+;disable_slat=1
+

@@ -30,7 +30,7 @@ need to compile only the driver then run:
 
 ```
 $> cd linux-kernel/linux-kernel-5.0.0-16.17
-$> sh nvme-make.sh
+$> sh nvme-make.sha
 
 ```
 
@@ -51,25 +51,27 @@ Usage: ./nvme-reload.sh {orig|emul|our-sol}
      our-sol -- side-core emulation of our nvme prototype with URGENT and BARRIER flags
      alpha   -- side-core emulation of our nvme prototype, only adaptive coalescing
      alpha0  -- side-core emulation of our nvme prototype, without any thresholds (new baseline0)
-
 ```
 
-To change the parameters edit the following config files:
+To change the parameters edit config files in form `nvme-$(hostname)-$(mode).conf`, for example:
+
 ```
 $> cd linux-kernel/linux-kernel-5.0.0-16.17
 $> vim nvme-$(hostname).conf            # params for the cinterrupts driver
 $> vim nvme-$(hostname)-clean.conf      # params for the original nvme driver
-$> vim nvme-$(hostname)-emul.conf       # params for thenvme driver of emulated device
+$> vim nvme-$(hostname)-emul.conf       # params for the emulated nvme device driver
 
 ```
 
 
 ### Installation and Setup Instructions
-After booting into this custom kernel, you can run the following experiments:
-
-TODO
-
+After booting into this custom kernel, compile fio benchmark.
+Run `build-fio.sh` in the top-level directory of this repository.
+Path to fio from the top-level directory: `fio/fio-3.13/fio`
 If you can successfully run FIO, you are ready!
+
+Now you can run the following experiments:
+TODO: decribe each experiment
 
 ### Running benchmarks
 You are welcome to clone and compile the following applications, which are applications we modified for cinterrupts.

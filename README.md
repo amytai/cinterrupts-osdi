@@ -22,6 +22,22 @@ Run `build-kernel.sh` in the top-level directory of this repository. This will b
 
 After that, to switch between different NVMe interrupt emulations, you simply need to unload and load the correct NVMe module (see below).
 
+```
+$> cd linux-kernel/linux-kernel-5.0.0-16.17
+$> sh ./nvme-reload.sh our-sol
+$>
+$> sh ./nvme-reload.sh
+Usage: ./nvme-reload.sh {orig|emul|our-sol}
+
+     orig    -- original nvme driver, for-bare-metal tests
+     emul    -- emulation of the original nvme driver on a side core
+     emul-100-32 -- emulation of the original nvme driver with 100 usec and 32 thr aggregation params
+     our-sol -- side-core emulation of our nvme prototype with URGENT and BARRIER flags
+     alpha   -- side-core emulation of our nvme prototype, only adaptive coalescing
+     alpha0  -- side-core emulation of our nvme prototype, without any thresholds (new baseline0)
+
+```
+
 ### Installation and Setup Instructions
 After booting into this custom kernel, you can run the following experiments:
 

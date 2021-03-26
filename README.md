@@ -23,6 +23,7 @@ TODO: information on how to access the machines.
 * `fio/fio-3.13.tgz` sources of original version of fio 3.13
 * `fio/fio_barrier.patch` patch with cinterrupts support in fio
 * `build-fio.sh` script to extract fio source, apply cinterrupts patch and compile the fio
+* `utils` utilities and helper scripts we use in our project
 * `fig5` directory with scripts to reproduce Figure 5 in the paper
 
 

@@ -18,9 +18,25 @@ To build the custom cint kernel, you will need any dependencies required for the
 These include libssl-dev, bison, flex, and optionally dh-exec.
 If there is a compilation error, it is likely because one of these packages is missing.
 
-Run `build-kernel.sh` in the top-level directory of this repository. This will build and install this custom kernel in the normal places, i.e. /boot and update grub. The name of the kernel image will be 5.0.8-nvmecint. You will then need to reboot into this kernel, which is only necessary the first time.
+Run `build-kernel.sh` in the top-level directory of this repository.
+This will build and install this custom kernel in the normal places,
+i.e. /boot and update grub. The name of the kernel image
+will be 5.0.8-nvmecint. You will then need to reboot into this kernel,
+which is only necessary the first time.
 
-After that, to switch between different NVMe interrupt emulations, you simply need to unload and load the correct NVMe module (see below).
+When kernel is loaded the driver is ready. If you modify driver and
+need to compile only the driver then run:
+
+
+```
+$> cd linux-kernel/linux-kernel-5.0.0-16.17
+$> sh nvme-make.sh
+
+```
+
+After that, to switch between different NVMe interrupt emulations and
+the original driver, you simply need to unload and load the correct
+NVMe module with relevant parameters:
 
 ```
 $> cd linux-kernel/linux-kernel-5.0.0-16.17
@@ -37,6 +53,16 @@ Usage: ./nvme-reload.sh {orig|emul|our-sol}
      alpha0  -- side-core emulation of our nvme prototype, without any thresholds (new baseline0)
 
 ```
+
+To change the parameters edit the following config files:
+```
+$> cd linux-kernel/linux-kernel-5.0.0-16.17
+$> vim nvme-$(hostname).conf            # params for the cinterrupts driver
+$> vim nvme-$(hostname)-clean.conf      # params for the original nvme driver
+$> vim nvme-$(hostname)-emul.conf       # params for thenvme driver of emulated device
+
+```
+
 
 ### Installation and Setup Instructions
 After booting into this custom kernel, you can run the following experiments:

@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# On dante734 three Mellanx NICs are connected to the following root ports:
+# 00.02.0 root port1 for mlx0
+# 00:03.2 root port2 for oct00
+# 80:03.2 root port3 for oct01
+# 80:01.0 root port for Intel NVMe SSD
+
+port1=00:02.0
+port2=00:03.2
+port3=80:03.2
+port4=80:01.0
+
+# Allocating writes can be disabled per root port and per CPU (IIO device).
+# Root port has 7th (use_allocating_flow_wr) bit in Performance Control and Status
+# Register 0. There are difference dependencies with other registers that I
+# am not fully familiar with so just in case, it is possible to disable
+# allocating writes per IIO, writing 1 to 24th bit (disable_all_allocating_flows)
+# of iiomiscctrl register of IIO device (device 5 func 0)
+#
+iio0=00:05.0
+iio1=80:05.0
+bit24=`printf '%X'  $((0x1 << 24))`
+bit7=`printf '%X'  $((0x1 << 7))`
+
+state=`sudo setpci -s $port1 0x180.w`
+stateiio=`sudo setpci -s $iio0 0x1c0.l`
+#echo previous state=$state
+
+# To set a register, write reg=values where reg is the same as you would use
+# to query the register and values is a comma-separated list of values you
+# want to write starting with the given address. Each value to be written can
+# be specified either as a hexadecimal number or as a bits:mask pair which
+# causes the bits corresponding to binary ones in the mask to be changed to
+# values of the corresponding bits in the bits
+
+
+if [ "$1" = "1" ] ; then
+	echo "Turning on DDIO on IIOs (current state=$stateiio)"
+	sudo setpci -s $iio0 0x1c0.l=0x0:$bit24
+	sudo setpci -s $iio1 0x1c0.l=0x0:$bit24
+	echo "Turning on DDIO on root ports (current state=$state)"
+	sudo setpci -s $port1 0x180.w=$bit7:$bit7
+	sudo setpci -s $port2 0x180.w=$bit7:$bit7
+	sudo setpci -s $port3 0x180.w=$bit7:$bit7
+	sudo setpci -s $port4 0x180.w=$bit7:$bit7
+#	sudo setpci -s $port1 0x180.w=3091
+#	sudo setpci -s $port2 0x180.w=3091
+#	sudo setpci -s $port3 0x180.w=3091
+elif [ "$1" = "0" ] ; then
+	echo "Turning off DDIO on IIOs (current state=$stateiio)"
+	sudo setpci -s $iio0 0x1c0.l=$bit24:$bit24
+	sudo setpci -s $iio1 0x1c0.l=$bit24:$bit24
+
+	echo "Turning off DDIO on root ports (current state=$state)"
+	sudo setpci -s $port1 0x180.w=0x0:$bit7
+	sudo setpci -s $port2 0x180.w=0x0:$bit7
+	sudo setpci -s $port3 0x180.w=0x0:$bit7
+	sudo setpci -s $port4 0x180.w=0x0:$bit7
+#	sudo setpci -s $port1 0x180.w=3011
+#	sudo setpci -s $port2 0x180.w=3011
+#	sudo setpci -s $port3 0x180.w=3011
+fi

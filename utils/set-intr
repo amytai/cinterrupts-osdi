@@ -1,0 +1,37 @@
+#!/bin/bash
+
+
+dev=/dev/nvme0
+
+
+function usage() {
+	echo "Usage: $0 XX YY"
+	echo "	where XX is TIME (mult. of 100 usec) and YY is THR (inter. threshold) in decimal"
+	echo "To disable coalescing run it without args: $0"
+}
+
+if [ "$#" -eq 0 ]; then
+	echo "Disable inter. coalescing for dev: $dev"
+	val=0x000000
+
+elif [ "$#" -eq 2 ]; then
+
+	for i in $1 $2; do
+		if [[ $i -lt 0 || $i -gt 255 ]]; then
+			echo "Argument not in [0:255] range"
+			usage; exit 1;
+		fi
+	done
+
+	XX=$(printf '%02x' $1)
+	YY=$(printf '%02x' $2)
+	val="0x00$XX$YY"
+else
+	usage;	exit 1
+fi
+
+
+sudo nvme set-feature /dev/nvme0 -f 8 -v $val 
+echo "Updated intr. coalescing"
+sudo nvme get-feature $dev -f 8 -H
+

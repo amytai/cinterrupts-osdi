@@ -1,12 +1,32 @@
 ## Calibrated Interrupts
-This repository contains instructions and source code for compiling and reproducing results in the Calibrated Interrupts paper, to appear in OSDI '21 (see the paper PDF in the top-level of this repository).
+This repository contains instructions and source code for compiling and
+reproducing results in the Calibrated Interrupts (cinterrupts) paper,
+to appear in OSDI '21 (see the paper PDF in the top-level of this repository).
 
 ### Evaluation instructions
-At the end of this document, we describe how to compile and install the evaluation environment, should the evaluator choose to do so.
-However, due to needing the cinterrupts custom kernel, we have set up an environment for the evalutors on our machines.
+At the end of this document, we describe how to compile and install
+the evaluation environment, should the evaluator choose to do so.
+However, due to needing the cinterrupts custom kernel, we have set up
+an environment for the evalutors on our machines.
 
 #### Accessing the evaluation environment
 TODO: information on how to access the machines.
+
+
+### Content of the repository
+* `linux-kernel` directory with Linux kernel sources and cinterrupts patch
+* `linux-kernel/cinterrupts.patch` device emulation and nvme driver
+* `linux-kernel/linux-kernel-5.0.0-16.17.tgz-part-a[abcd]` splitted archive of the Linux vanilla kernel ver 5.0.0-16.17
+* `linux-kernel/config-file` config file used for our kernel compilation
+* `build-kernel.sh` script to extract Linux kernels source, apply the cinterrupts patch and compile the kernel
+* `fio` directory with fio 3.13 sources and cinterrupt patch for fio
+* `fio/fio-3.13.tgz` sources of original version of fio 3.13
+* `fio/fio_barrier.patch` patch with cinterrupts support in fio
+* `build-fio.sh` script to extract fio source, apply cinterrupts patch and compile the fio
+* `fig5` directory with scripts to reproduce Figure 5 in the paper
+
+
+
 
 #### Reproducing each figure
 In the XXX/ subdirectory, we have scripts and instructions for reproducing the key figures in our paper.
@@ -24,8 +44,8 @@ i.e. /boot and update grub. The name of the kernel image
 will be 5.0.8-nvmecint. You will then need to reboot into this kernel,
 which is only necessary the first time.
 
-When kernel is loaded the driver is ready. If you modify driver and
-need to compile only the driver then run:
+When kernel is loaded the driver is ready. If you modify the driver and
+need to compile it then run:
 
 
 ```
@@ -36,7 +56,7 @@ $> sh nvme-make.sha
 
 After that, to switch between different NVMe interrupt emulations and
 the original driver, you simply need to unload and load the correct
-NVMe module with relevant parameters:
+nvme driver with relevant parameters:
 
 ```
 $> cd linux-kernel/linux-kernel-5.0.0-16.17

@@ -1,0 +1,75 @@
+diff --git a/engines/libaio.c b/engines/libaio.c
+index 7ac36b2..468e60e 100644
+--- a/engines/libaio.c
++++ b/engines/libaio.c
+@@ -13,6 +13,10 @@
+ #include "../lib/pow2.h"
+ #include "../optgroup.h"
+ 
++#ifndef IOCB_FLAG_BARRIER
++#define IOCB_FLAG_BARRIER	(1 << 9)
++#endif
++
+ static int fio_libaio_commit(struct thread_data *td);
+ 
+ struct libaio_data {
+@@ -39,6 +43,7 @@ struct libaio_data {
+ struct libaio_options {
+ 	void *pad;
+ 	unsigned int userspace_reap;
++	unsigned int barrier;
+ };
+ 
+ static struct fio_option options[] = {
+@@ -52,6 +57,15 @@ static struct fio_option options[] = {
+ 		.group	= FIO_OPT_G_LIBAIO,
+ 	},
+ 	{
++		.name	= "barrier",
++		.lname	= "Barrier",
++		.type	= FIO_OPT_STR_SET,
++		.off1	= offsetof(struct libaio_options, barrier),
++		.help	= "Use barrier flag",
++		.category = FIO_OPT_C_ENGINE,
++		.group	= FIO_OPT_G_LIBAIO,
++	},
++	{
+ 		.name	= NULL,
+ 	},
+ };
+@@ -240,6 +254,7 @@ static void fio_libaio_queued(struct thread_data *td, struct io_u **io_us,
+ 
+ static int fio_libaio_commit(struct thread_data *td)
+ {
++	struct libaio_options *o = td->eo;
+ 	struct libaio_data *ld = td->io_ops_data;
+ 	struct iocb **iocbs;
+ 	struct io_u **io_us;
+@@ -255,6 +270,9 @@ static int fio_libaio_commit(struct thread_data *td)
+ 		nr = min((unsigned int) nr, ld->entries - ld->tail);
+ 		io_us = ld->io_us + ld->tail;
+ 		iocbs = ld->iocbs + ld->tail;
++		
++		if (o->barrier)
++			iocbs[nr-1]->u.c.flags |= IOCB_FLAG_BARRIER;
+ 
+ 		ret = io_submit(ld->aio_ctx, nr, iocbs);
+ 		if (ret > 0) {
+diff --git a/stat.c b/stat.c
+index 331abf6..d2e24f1 100644
+--- a/stat.c
++++ b/stat.c
+@@ -1227,6 +1227,13 @@ static void show_thread_status_terse_all(struct thread_stat *ts,
+ 	if (strlen(ts->description))
+ 		log_buf(out, ";%s", ts->description);
+ 
++	/* last, add total numbers of completions and submitions */
++	log_buf(out, ";%s", "foo");
++	log_buf(out, ";%lu", ts->total_io_u[DDIR_READ]); // total read IOs
++	log_buf(out, ";%lu", ts->total_io_u[DDIR_WRITE]);// total write IOs
++	log_buf(out, ";%lu", ts->total_submit);		 // total submit calls
++	log_buf(out, ";%lu", ts->total_complete);	 // total complete calls
++	log_buf(out, ";%s", "boo");
+ 	log_buf(out, "\n");
+ }
+ 

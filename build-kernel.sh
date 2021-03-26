@@ -8,7 +8,7 @@ config=config-file
 pushd $kerneldir
 echo -n "Extracting kernel...."
 tar -zxf $kerneltar.tgz 
-echo -n "Done"
+echo "Done"
 
 pushd $kerneltar
 echo "Applying patch"

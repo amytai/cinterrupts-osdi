@@ -21,8 +21,8 @@ TODO: information on how to access the machines.
 * `linux-kernel/config-file` config file used for our kernel compilation
 * `build-kernel.sh` script to extract Linux kernels source, apply the cinterrupts patch and compile the kernel
 * `fio` directory with fio 3.13 sources and cinterrupt patch for fio
-* `fio/fio-3.13.tgz` sources of original version of fio 3.13
-* `fio/fio_barrier.patch` patch with cinterrupts support in fio
+* `fio/fio-3.12.tgz` sources of original fio version 3.12
+* `fio/fio-3.12-barrier.patch` patch with cinterrupts support in fio + additional statistics added to fio as we used these in our results analysis
 * `build-fio.sh` script to extract fio source, apply cinterrupts patch and compile the fio
 * `utils` directory with scripts we use in our project
 * `fig5` directory with scripts to reproduce Figure 5 in the paper
@@ -108,8 +108,8 @@ $> vim nvme-$(hostname)-emul.conf       # params for the emulated nvme device dr
 ### Installation and Setup Instructions
 After booting into this custom kernel, compile fio benchmark.
 Run `build-fio.sh` in the top-level directory of this repository.
-Path to fio from the top-level directory: `fio/fio-3.13/fio`
-If you can successfully run FIO, you are ready!
+Path to fio from the top-level directory: `fio/fio-3.12/fio`
+If you can successfully run fio, you are ready!
 
 Now you can run the following experiments:
 TODO: decribe each experiment

@@ -1,8 +1,8 @@
 #!/bin/bash
 
 fiodir=fio
-fiotar=fio-3.13
-patch=fio_barrier.patch
+fiotar=fio-3.12
+patch=fio-3.12-barrier.patch
 
 pushd $fiodir
 echo -n "Extracting fio sources...."
@@ -14,6 +14,7 @@ echo "Applying patch"
 patch -p1 < ../$patch
 
 echo "Compile fio"
+./configure
 make
 
 popd

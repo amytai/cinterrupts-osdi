@@ -11,8 +11,6 @@ cat $kerneltar.tgz-part-* > $kerneltar.tgz
 tar -zxf $kerneltar.tgz 
 echo "Done"
 
-exit
-
 pushd $kerneltar
 echo "Applying patch"
 patch -p1 < ../$patch

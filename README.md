@@ -15,7 +15,8 @@ TODO: information on how to access the machines.
 
 ### Content of the repository
 * `linux-kernel` directory with Linux kernel sources and cinterrupts patch
-* `linux-kernel/cinterrupts.patch` device emulation and nvme driver
+* `linux-kernel/cinterrupts-01-basis.patch` device emulation and nvme driver
+* `linux-kernel/cinterrupts-02-rocks-addon.patch` addition for multi queue support for rocksdb and other macrobenchmarks
 * `linux-kernel/linux-kernel-5.0.0-16.17.tgz-part-a[abcd]` splitted archive of the Linux vanilla kernel ver 5.0.0-16.17
 * `linux-kernel/config-file` config file used for our kernel compilation
 * `build-kernel.sh` script to extract Linux kernels source, apply the cinterrupts patch and compile the kernel
@@ -23,35 +24,54 @@ TODO: information on how to access the machines.
 * `fio/fio-3.13.tgz` sources of original version of fio 3.13
 * `fio/fio_barrier.patch` patch with cinterrupts support in fio
 * `build-fio.sh` script to extract fio source, apply cinterrupts patch and compile the fio
-* `utils` utilities and helper scripts we use in our project
+* `utils` directory with scripts we use in our project
 * `fig5` directory with scripts to reproduce Figure 5 in the paper
 
 
 
 
 #### Reproducing each figure
-In the XXX/ subdirectory, we have scripts and instructions for reproducing the key figures in our paper.
+In the XXX/ subdirectory, we have scripts and instructions for
+reproducing the key figures in our paper.
 
 
 ### Compilation instructions
 We highly recommend that you build on Ubuntu 16.04.
-To build the custom cint kernel, you will need any dependencies required for the Linux kernel.
-These include libssl-dev, bison, flex, and optionally dh-exec.
-If there is a compilation error, it is likely because one of these packages is missing.
+To build the custom cint kernel, you will need any dependencies
+required for the Linux kernel. These include libssl-dev, bison,
+flex, and optionally dh-exec. If there is a compilation error,
+it is likely because one of these packages is missing.
 
 Run `build-kernel.sh` in the top-level directory of this repository.
-This will build and install this custom kernel in the normal places,
-i.e. /boot and update grub. The name of the kernel image
-will be 5.0.8-nvmecint. You will then need to reboot into this kernel,
-which is only necessary the first time.
+This will build and install our custom kernels for micro and macro
+bechmarks. You will then need to run this script once. To simplify artifact
+testing we already ran this script which extracted, compiled and installed
+our kernels into `linux-kernel/linux-kernel-5.0.0-16.17-nvmecint` and
+`linux-kernel/linux-kernel-5.0.0-16.17-nvmecint-rocks` directories.
+
+We install two kernels:
+* `5.0.8-nvmecint` is used to test microbenchamrks, it emulates a single SQ/CQ pair.
+* `5.0.8-nvmecint-rocks` is used to test multithreaded macrobenchamrks,
+   same as above with the addition of multiple SQ/CQ pairs emulation.
+
+To boot into `5.0.8-nvmecint` kernel run:
+```
+$> sudo grub-reboot "Ubuntu, with Linux 5.0.8-nvmecint"
+$> sudo reboot
+```
+To boot into `5.0.8-nvmecint-rocks` kernel run:
+```
+$> sudo grub-reboot "Ubuntu, with Linux 5.0.8-nvmecint-rocks"
+$> sudo reboot
+```
+
 
 When kernel is loaded the driver is ready. If you modify the driver and
 need to compile it then run:
 
-
 ```
-$> cd linux-kernel/linux-kernel-5.0.0-16.17
-$> sh nvme-make.sha
+$> cd linux-kernel/linux-kernel-5.0.0-16.17-nvmecint
+$> sh nvme-make.sh
 
 ```
 
@@ -60,7 +80,7 @@ the original driver, you simply need to unload and load the correct
 nvme driver with relevant parameters:
 
 ```
-$> cd linux-kernel/linux-kernel-5.0.0-16.17
+$> cd linux-kernel/linux-kernel-5.0.0-16.17-nvmecint
 $> sh ./nvme-reload.sh our-sol
 $>
 $> sh ./nvme-reload.sh
@@ -77,7 +97,7 @@ Usage: ./nvme-reload.sh {orig|emul|our-sol}
 To change the parameters edit config files in form `nvme-$(hostname)-$(mode).conf`, for example:
 
 ```
-$> cd linux-kernel/linux-kernel-5.0.0-16.17
+$> cd linux-kernel/linux-kernel-5.0.0-16.17-nvmecint
 $> vim nvme-$(hostname).conf            # params for the cinterrupts driver
 $> vim nvme-$(hostname)-clean.conf      # params for the original nvme driver
 $> vim nvme-$(hostname)-emul.conf       # params for the emulated nvme device driver
@@ -95,7 +115,8 @@ Now you can run the following experiments:
 TODO: decribe each experiment
 
 ### Running benchmarks
-You are welcome to clone and compile the following applications, which are applications we modified for cinterrupts.
+You are welcome to clone and compile the following applications,
+which are applications we modified for cinterrupts.
 
 - FIO
 - RocksDB

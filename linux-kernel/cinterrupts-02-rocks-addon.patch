@@ -1,0 +1,1015 @@
+diff --git a/Makefile b/Makefile
+index c1eba94..f2dfcb4 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,7 +2,7 @@
+ VERSION = 5
+ PATCHLEVEL = 0
+ SUBLEVEL = 8
+-EXTRAVERSION = -nvmecint
++EXTRAVERSION = -nvmecint-rocks
+ NAME = Shy Crocodile
+ 
+ # *DOCUMENTATION*
+diff --git a/block/blk-core.c b/block/blk-core.c
+index 8d412cf..909a1b4 100644
+--- a/block/blk-core.c
++++ b/block/blk-core.c
+@@ -725,9 +725,11 @@ bool blk_attempt_plug_merge(struct request_queue *q, struct bio *bio,
+ 		}
+ 
+ 		if (merged) {
+-			// Make sure the barrier flag makes it in
++			// Make sure the barrier and urgent flag makes it in
+ 			if (bio->bi_opf & REQ_BARRIER)
+ 				rq->cmd_flags |= REQ_BARRIER;
++			if (bio->bi_opf & REQ_URGENT)
++				rq->cmd_flags |= REQ_URGENT;
+ 			return true;
+ 		}
+ 	}
+diff --git a/drivers/nvme/host/pci.c b/drivers/nvme/host/pci.c
+index 0524cd8..b00ed55 100644
+--- a/drivers/nvme/host/pci.c
++++ b/drivers/nvme/host/pci.c
+@@ -57,17 +57,86 @@
+ #define NVME_MAX_KB_SZ	4096
+ #define NVME_MAX_SEGS	127
+ 
+-#define URGENT_SHIFT    15
+-#define BARRIER_SHIFT   14
+-#define COMPLETED_SHIFT 13
++/* How many irq_poller cores there are */
++#define MAX_POLLER  4
++/* TODO: this is currently hard-coded. We should really get this information after the nvme_dev struct is created. Typically this is around 32*/
++#define MAX_QUEUES  128
++
++/* These are masks against the nvme_completion->completion_id field */
++#define URGENT_MASK	0x8000
++#define BARRIER_MASK	0x4000
++
++/* These are masks against the nvme_completion->sq_id field */
++#define COMPLETED_MASK	0x8000
++
++static bool soph_barrier = false;
++module_param(soph_barrier, bool, 0644);
++MODULE_PARM_DESC(soph_barrier, "Process sophisticated barrier, default is No");
++
++/* BARRIER generation IDs */
++#define MAX_BARRIERS    16
++#define GEN_OFFSET  10
++#define BARRIER_GEN_MASK    (0xf << GEN_OFFSET)
++
++typedef struct {
++    __u16 barriers[MAX_BARRIERS];
++    __u8 cur_barrier_gen;
++    spinlock_t barrier_lock;
++} barrier_metadata;
++
++static barrier_metadata __per_queue_barriers[MAX_QUEUES]; 
++
++/* End the current barrier generation by incrementing the gen ID for the given queue */
++static inline void END_BARRIER_GEN(u16 poller_id) {
++    if (soph_barrier) {
++        barrier_metadata *queue_meta = &__per_queue_barriers[poller_id];
++
++        spin_lock(&queue_meta->barrier_lock);
++        queue_meta->cur_barrier_gen = queue_meta->cur_barrier_gen % (MAX_BARRIERS - 1) + 1;
++        spin_unlock(&queue_meta->barrier_lock);
++        if (queue_meta->barriers[queue_meta->cur_barrier_gen] != 0)
++            printk("yikes... not 0, instead: %d", queue_meta->barriers[queue_meta->cur_barrier_gen]);
++    }
++}
++
++/* Mark another completion in the given queue, for the given generation id.
++ * 
++ * Return true if that generation is finished (all req completions have arrived) AND if
++ * the barrier was active. The barrier is active if the current generation id is NOT the
++ * given generation ID.
++ * Activeness is used to prevent against when reqs are submitted and completed when there is
++ * no BARRIER encountered.
++ */
++static inline bool BARRIER_DONE_AND_ACTIVE(u16 poller_id, u16 gen_id) {
++    if (soph_barrier) {
++        bool ret;
++        barrier_metadata *queue_meta = &__per_queue_barriers[poller_id];
++
++        spin_lock(&queue_meta->barrier_lock);
++        queue_meta->barriers[gen_id]--;
++        ret = (gen_id < MAX_BARRIERS && gen_id > 0) && (queue_meta->barriers[gen_id] == 0);
+ 
+-#define URGENT_MASK	(1 << URGENT_SHIFT)
+-#define BARRIER_MASK	(1 << BARRIER_SHIFT)
+-#define COMPLETED_MASK	(1 << COMPLETED_SHIFT)
++        /* Now && in whether the barrier was active, i.e., if this gen_id is even a barrier */
++        ret = ret && (gen_id != queue_meta->cur_barrier_gen);
++        spin_unlock(&queue_meta->barrier_lock);
++        return ret;
++    } else return false;
++}
+ 
+-#define URGENT_BIT(x)	((x & URGENT_MASK) >> URGENT_SHIFT)
+-#define BARRIER_BIT(x)  ((x & BARRIER_MASK) >> BARRIER_SHIFT)
++/* Increment barrier counter for the current active generation on the given queue.
++ * Return the current active generation, to be embedded in a command. */
++static inline __u8 BARRIER_INC(u16 poller_id) {
++    if (soph_barrier) {
++        __u8 ret;
++        barrier_metadata *queue_meta = &__per_queue_barriers[poller_id];
+ 
++        spin_lock(&queue_meta->barrier_lock);
++        queue_meta->barriers[queue_meta->cur_barrier_gen]++;
++        ret = queue_meta->cur_barrier_gen;
++        spin_unlock(&queue_meta->barrier_lock);
++        return ret;
++    } return 0;
++}
+ 
+ static int use_threaded_interrupts;
+ module_param(use_threaded_interrupts, int, 0);
+@@ -114,23 +183,27 @@ module_param_cb(poll_queues, &queue_count_ops, &poll_queues, 0644);
+ MODULE_PARM_DESC(poll_queues, "Number of queues to use for polled IO.");
+ 
+ static bool empathetic = false;
+-module_param(empathetic, bool, 0444);
++module_param(empathetic, bool, 0644);
+ MODULE_PARM_DESC(empathetic, "Enable nvme interrupt emulator");
+ 
+-static int irq_poller_cpu = 0;
+-module_param(irq_poller_cpu, int, 0444);
+-MODULE_PARM_DESC(irq_poller_cpu, "Core id for the irq_poller, default 0");
++static bool ewma_on = false;
++module_param(ewma_on, bool, 0444);
++MODULE_PARM_DESC(ewma_on, "Enable ewma IRQ modulation while in empathetic mode");
++
++static int irq_poller_cpu[MAX_POLLER] = {5,6,7,8};
++module_param_array(irq_poller_cpu, int, NULL, 0444);
++MODULE_PARM_DESC(irq_poller_cpu, "Core id(s) for the irq_poller, default 5");
+ 
+-static int irq_poller_target_cpu = 1;
+-module_param(irq_poller_target_cpu, int, 0444);
++static int irq_poller_target_cpu[MAX_POLLER] = {1,2,3,4};
++module_param_array(irq_poller_target_cpu, int, NULL, 0444);
+ MODULE_PARM_DESC(irq_poller_target_cpu, "Completion queue core id, default 1");
+ 
+-static int irq_poller_target_queue_id = 2;
+-module_param(irq_poller_target_queue_id, int, 0444);
++static int irq_poller_target_queue_id[MAX_POLLER] = {5,9,13,2};
++module_param_array(irq_poller_target_queue_id, int, NULL, 0444);
+ MODULE_PARM_DESC(irq_poller_target_queue_id, "Completion queue id, default 2");
+ 
+ static unsigned int irq_poller_max_thr = 0;
+-module_param(irq_poller_max_thr, uint, 0444);
++module_param(irq_poller_max_thr, uint, 0644);
+ MODULE_PARM_DESC(irq_poller_max_thr, "Alpha max Aggregation Threshold, range 0-255, default 0");
+ 
+ #if 0
+@@ -147,14 +220,6 @@ static bool urgent_ooo = true;
+ module_param(urgent_ooo, bool, 0644);
+ MODULE_PARM_DESC(urgent_ooo, "Process urgent request completion out of order, default is No");
+ 
+-/*
+- * Max urgent irqs rate, to prevent interrupt storm.
+- * 10,000 ns is 100K int/sec which is very high rate even for NICs
+- */
+-static unsigned int urgent_interval_min_thr = 0;
+-module_param(urgent_interval_min_thr, uint, 0444);
+-MODULE_PARM_DESC(urgent_interval_min_thr, "Urgent requests min interval threshold to prevent interrupt storm, in ns, default 0 (disabled)");
+-
+ static DECLARE_WAIT_QUEUE_HEAD(irq_poller_wait);
+ 
+ struct nvme_dev;
+@@ -1003,18 +1068,19 @@ static void nvme_irq_helper(void *data);
+ static void nvme_irq_urgent_helper(void *data);
+ 
+ struct irq_poller_data {
+-	int cpu;
+-	struct nvme_queue *queues; // dev->queues
++    int target_queue_id;
++	int target_cpu;
++	struct nvme_dev *dev; // dev
+ };
+-static struct task_struct *irq_poller_th;
++static struct task_struct *irq_poller_th[MAX_POLLER];
+ 
+ #define MIN(a, b) (a > b ? b : a)
+ 
+-//#define DO_HIST
++#define DO_HIST
+ #ifdef DO_HIST
+ #define HIST_SIZE 1024
+ static int __hist[HIST_SIZE];
+-#define HIST_UPDATE(i) do{ __hist[i]++; } while(0)
++#define HIST_UPDATE(i) do{ if (i > HIST_SIZE) {__hist[HIST_SIZE-1]++;} else {__hist[i]++; }} while(0)
+ #define HIST_DUMP() do {			\
+ 	int i;					\
+ 	for (i = 0; i < HIST_SIZE; i++)		\
+@@ -1032,7 +1098,13 @@ static int __hist[HIST_SIZE];
+ /* 60 usec interval is 17K int/sec which is bearable */
+ #define IRQ_INTERVAL_THR_DOWN_NS 60000 /* if more then decrease delay */
+ 
++/* Max urgent irqs rate, to prevent interrupt storm.
++ * 10 usec is 100K int/sec which is very high rate even for NICs
++ * */
++#define IRQ_URG_INTERVAL_MAX_THR_NS 10000
++
+ #define MAX_DELAY		32 /* MAX wait time for the next request arrival */
++#define MIN_DELAY		3 /* This is the interarrival time for a fully loaded disk */
+ 
+ #define IRQ_EWMA_WEIGHT		128 /* last sample contributes 1/128 to the avg */
+ #define IRQ_URGENT_EWMA_WEIGHT	128
+@@ -1042,9 +1114,8 @@ DECLARE_EWMA(irq_urgent_interval, 0, IRQ_URGENT_EWMA_WEIGHT)
+ struct irq_poller_irqdata {
+ 	int dst_cpu;
+ 	int thr;
+-	int max_thr;
+ 	int urg_thr;
+-	int urg_int_min_thr;
++	int max_thr;
+ 	u64 last_irq;
+ 	u64 last_urg_irq;
+ 	struct nvme_queue *queue;
+@@ -1056,12 +1127,13 @@ static void irq_poller_fire(struct irq_poller_irqdata *irq) {
+ 
+ 	u64 cur;
+ 
+-	HIST_UPDATE(irq->thr);
++	HIST_UPDATE(300 + irq->thr);
+ 	smp_call_function_single(irq->dst_cpu, nvme_irq_helper,
+ 			irq->queue, WAIT_FOR_COMPL);
+ 
+ 	cur = sched_clock_cpu(smp_processor_id());
+-	ewma_irq_interval_add(irq->irq_avg, cur - irq->last_irq);
++    if (ewma_on)
++	    ewma_irq_interval_add(irq->irq_avg, cur - irq->last_irq);
+ 	irq->last_irq = cur;
+ 	irq->thr = 0;
+ 
+@@ -1082,20 +1154,21 @@ static void irq_poller_fire_urgent(struct irq_poller_irqdata *irq, bool urg) {
+ 
+ 	u64 cur;
+ 
+-	/*
+-	 * To prevent interrupt storm, don't fire an urgent interrupt
+-	 * if its rate above the threshold (interval below the min).
+-	 * Instead, use alpha.
+-	 */
+-	if (ewma_irq_urgent_interval_read(irq->irq_urg_avg) <
+-					  irq->urg_int_min_thr) {
+-		irq->thr++;
+-		irq->urg_thr++;
+-		return;
+-	}
+-
+-	/*
+-	 * Fire out-of-order interrupt only if URGENT flag is set and
++    if (ewma_on) {
++        /*
++         * To prevent interrupt storm, don't fire an urgent interrupt
++         * if its rate above the threshold, use alpha.
++         */
++        if (ewma_irq_urgent_interval_read(irq->irq_urg_avg) <
++                IRQ_URG_INTERVAL_MAX_THR_NS) {
++            irq->thr++;
++            irq->urg_thr++;
++            return;
++        }
++    }
++
++    /*
++     * Fire out-of-order interrupt only if URGENT flag is set and
+ 	 * OOO (urgent_ooo) is enabled globally.
+ 	 */
+ 	if (urg && urgent_ooo) {
+@@ -1105,8 +1178,9 @@ static void irq_poller_fire_urgent(struct irq_poller_irqdata *irq, bool urg) {
+ 		 * If OOO completion is enabled then we don't count this
+ 		 * completion in the threshold and we don't reset the thr.
+ 		 */
++        HIST_UPDATE(irq->thr);
+ 	} else {
+-		HIST_UPDATE(irq->thr);
++		//HIST_UPDATE(irq->thr);
+ 		smp_call_function_single(irq->dst_cpu, nvme_irq_helper,
+ 				irq->queue, WAIT_FOR_COMPL);
+ 		irq->thr = 0;
+@@ -1120,6 +1194,7 @@ static void irq_poller_fire_urgent(struct irq_poller_irqdata *irq, bool urg) {
+ }
+ 
+ static void irq_poller_calibrate_up(struct ewma_irq_interval *irq_avg) {
++    HIST_UPDATE(ewma_irq_interval_read(irq_avg) / 1000);
+ 
+ 	return; /* For now disable dynamic rate update */
+ 
+@@ -1136,7 +1211,7 @@ static void irq_poller_calibrate_down(struct ewma_irq_interval *irq_avg) {
+ 
+ 	if (ewma_irq_interval_read(irq_avg) > IRQ_INTERVAL_THR_DOWN_NS) {
+ 
+-		if (irq_poller_delay)
++		if (irq_poller_delay > MIN_DELAY)
+ 			irq_poller_delay--;
+ 	}
+ }
+@@ -1145,30 +1220,46 @@ static void irq_poller_calibrate_down(struct ewma_irq_interval *irq_avg) {
+  * Exclusive OR, only one flag must be set to consider the request
+  * as urgent. If both flags set then use alpha.
+  */
+-static bool urgent_xor_barrier_cqe(struct nvme_queue *queue, int idx)
++static inline bool urgent_xor_barrier_cqe(struct nvme_queue *queue, int idx)
+ {
+-	__u16 cmd = queue->cqes[idx].command_id;
+-
+-	return (URGENT_BIT(cmd) ^ BARRIER_BIT(cmd));
++	return queue->cqes[idx].command_id &
++			(URGENT_MASK ^ BARRIER_MASK);
+ }
+ 
+-static bool urgent_cqe(struct nvme_queue *queue, int idx)
++static inline bool urgent_cqe(struct nvme_queue *queue, int idx)
+ {
+ 	return queue->cqes[idx].command_id & URGENT_MASK;
+ }
+ 
++static inline __u8 get_gen_cqe(struct nvme_queue *queue, int idx) {
++    return (queue->cqes[idx].command_id & BARRIER_GEN_MASK) >> GEN_OFFSET;
++}
++
++static inline void clear_gen_cqe(struct nvme_queue *queue, int idx) {
++    queue->cqes[idx].command_id &= ~BARRIER_GEN_MASK;
++}
++
+ // This kthread will poll for the given cpu's CQ, and send an IPI to the given cpu
+ static int irq_poller(void *data)
+ {
+-	struct nvme_dev *dev = (struct nvme_dev *) data;
++    struct irq_poller_data *irq_data = (struct irq_poller_data *) data;
++
++	struct nvme_dev *dev = irq_data->dev;
++	int cpu = irq_data->target_cpu;
++	int queue_id = irq_data->target_queue_id;
++
+ 	struct pci_dev *pdev = to_pci_dev(dev->dev);
++
++    // Don't need this memory anymore
++    kfree(data);
++
+ 	struct ewma_irq_interval irq_avg;
+ 	struct ewma_irq_urgent_interval irq_urg_avg;
+ 
+ 	ktime_t current_time, next_time;
+-        bool found_work = false;
++    bool found_work, barrier_done_and_active = false;
+ 
+-	struct nvme_queue *queue = &dev->queues[irq_poller_target_queue_id];
++	struct nvme_queue *queue = &dev->queues[queue_id];
+ 
+ 	struct nvme_queue fake_queue = {
+ 		.cq_head = queue->q_depth - 1,
+@@ -1177,10 +1268,9 @@ static int irq_poller(void *data)
+ 	};
+ 
+ 	struct irq_poller_irqdata irqdata = {
+-		.dst_cpu = irq_poller_target_cpu,
++		.dst_cpu = cpu,
+ 		.thr = 0,
+ 		.max_thr = irq_poller_max_thr,
+-		.urg_int_min_thr = urgent_interval_min_thr,
+ 		.last_irq = sched_clock_cpu(smp_processor_id()),
+ 		.last_urg_irq = sched_clock_cpu(smp_processor_id()),
+ 		.queue = queue,
+@@ -1221,15 +1311,24 @@ static int irq_poller(void *data)
+ 				fake_queue.cq_head, fake_queue.cq_phase)) {
+ 
+ 				found_work = true;
+-
+-				if (urgent_xor_barrier_cqe(queue, fake_queue.cq_head))
+-					irq_poller_fire_urgent(&irqdata,
+-						urgent_cqe(queue, fake_queue.cq_head));
+-				else
+-					irqdata.thr++;
+-
+-				if (irqdata.thr >= irqdata.max_thr)
++    
++                barrier_done_and_active = soph_barrier && BARRIER_DONE_AND_ACTIVE(queue->qid, get_gen_cqe(queue, fake_queue.cq_head));
++                clear_gen_cqe(queue, fake_queue.cq_head);
++                /* The finished barrier only generates an IRQ if it's an active barrier. i.e. if it has been
++                 * sealed in the past */
++                if (barrier_done_and_active) {
+ 					irq_poller_fire(&irqdata);
++                    HIST_UPDATE(200);
++                } else { 
++                    bool do_urgent = soph_barrier ? urgent_cqe(queue, fake_queue.cq_head) : urgent_xor_barrier_cqe(queue, fake_queue.cq_head);
++                    if (do_urgent) {
++                        irq_poller_fire_urgent(&irqdata, urgent_cqe(queue, fake_queue.cq_head));
++                    } else
++                        irqdata.thr++;
++
++                    if (irqdata.thr >= irq_poller_max_thr)
++                        irq_poller_fire(&irqdata);
++                }
+ 
+ 				nvme_update_cq_head(&fake_queue);
+ 			}
+@@ -1258,18 +1357,18 @@ static int irq_poller(void *data)
+ 
+ 				cpu_relax();
+ 			}
+-			irq_poller_calibrate_up(&irq_avg);
++            if (ewma_on)
++			    irq_poller_calibrate_up(&irq_avg);
+ 		}
+ 
+ 		if (irqdata.thr)
+ 			irq_poller_fire(&irqdata);
+ 		else {
+-			irq_poller_calibrate_down(&irq_avg);
++            if (ewma_on)
++			    irq_poller_calibrate_down(&irq_avg);
+ 		}
+ 
+ 	}
+-	/* clean up before we shutdown poller */
+-	irq_poller_fire(&irqdata);
+ 
+ 	enable_irq(pci_irq_vector(pdev, queue->cq_vector));
+ 	HIST_DUMP();
+@@ -1279,32 +1378,41 @@ static int irq_poller(void *data)
+ 
+ static int irq_poller_init(struct nvme_dev *dev)
+ {
+-	int cpu = irq_poller_cpu;
+-	char thread_name[TASK_COMM_LEN];
++    int i = 0;
++    for (; i < MAX_POLLER; i++) {
++        int cpu = irq_poller_cpu[i];
++        char thread_name[TASK_COMM_LEN];
+ 
+-	if (irq_poller_th) {
+-		pr_err("irq_poller thread was already created %s : %u",
+-				get_task_comm(thread_name, irq_poller_th),
+-				task_tgid_nr(irq_poller_th));
+-		goto out;
++        if (irq_poller_th[i]) {
++            pr_err("irq_poller thread was already created %s : %u",
++                    get_task_comm(thread_name, irq_poller_th[i]),
++                    task_tgid_nr(irq_poller_th[i]));
++            continue;
++        }
+ 
+-	}
++        struct irq_poller_data *args = kmalloc(sizeof(struct irq_poller_data), GFP_KERNEL);
++        args->dev = dev;
++        args->target_cpu = irq_poller_target_cpu[i];
++        args->target_queue_id = irq_poller_target_queue_id[i];
+ 
+-	sprintf(thread_name, "irq_poller_%d", cpu);
+-	irq_poller_th = kthread_create(irq_poller, dev, thread_name);
+-	kthread_bind(irq_poller_th, cpu);
+-	wake_up_process(irq_poller_th);
+-out:
+-	return 0;
++        sprintf(thread_name, "irq_poller_%d", cpu);
++        irq_poller_th[i] = kthread_create(irq_poller, args, thread_name);
++        kthread_bind(irq_poller_th[i], cpu);
++        wake_up_process(irq_poller_th[i]);
++    }
++
++    return 0;
+ }
+ 
+ static void irq_poller_shutdown(void)
+ {
+-	if (irq_poller_th)
+-		kthread_stop(irq_poller_th);
++    int i = 0;
++    for (; i < MAX_POLLER; i++) {
++        if (irq_poller_th[i])
++            kthread_stop(irq_poller_th[i]);
++    }
+ }
+ 
+-
+ /*
+  * NOTE: ns is NULL when called on the admin queue.
+  */
+@@ -1341,13 +1449,24 @@ static blk_status_t nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
+ 
+ 	blk_mq_start_request(req);
+ 
+-	if (empathetic && (req->cmd_flags & REQ_URGENT)) {
+-		cmnd.rw.command_id |= URGENT_MASK;
+-	}
++    if (empathetic) {
++        __u8 gen_id = BARRIER_INC(nvmeq->qid);
++        /* Embed generation ID in command_id */
++        cmnd.rw.command_id |= ((gen_id & 0xf) << GEN_OFFSET);
+ 
+-	if (empathetic && (req->cmd_flags & REQ_BARRIER)) {
+-		cmnd.rw.command_id |= BARRIER_MASK;
+-	}
++        if (req->cmd_flags & REQ_URGENT) {
++            cmnd.rw.command_id |= URGENT_MASK;
++        }
++
++        if (req->cmd_flags & REQ_BARRIER) {
++            cmnd.rw.command_id |= BARRIER_MASK;
++
++            /* Check it's a true barrier and not an agnostic req */
++            if (!(cmnd.rw.command_id & URGENT_MASK)) {
++                END_BARRIER_GEN(nvmeq->qid);
++            }
++        }
++    }
+ 
+ 	nvme_submit_cmd(nvmeq, &cmnd, bd->last);
+ 
+@@ -1383,11 +1502,12 @@ static inline void nvme_handle_cqe(struct nvme_queue *nvmeq, u16 idx)
+ 	// We HAVE to use modified_id here, instead of setting this in irq_poller
+ 	// This is because sometimes the IRQ will find CQEs that were never touched
+ 	// by the irq_poller
+-	__u16 modified_id = cqe->command_id & (~(URGENT_MASK | BARRIER_MASK | COMPLETED_MASK));
++	__u16 modified_id = cqe->command_id & (~(URGENT_MASK | BARRIER_MASK | BARRIER_GEN_MASK));
+ 
+ 	/* check that command was already completed */
+-	if (cqe->command_id & COMPLETED_MASK)
++	if (le16_to_cpu(cqe->sq_id) & COMPLETED_MASK) {
+ 		return;
++    }
+ 
+ 	if (unlikely(modified_id >= nvmeq->q_depth)) {
+ 		dev_warn(nvmeq->dev->ctrl.device,
+@@ -1443,6 +1563,7 @@ static inline int nvme_process_cq(struct nvme_queue *nvmeq, u16 *start,
+ 
+ static irqreturn_t nvme_irq_urgent(int irq, void *data)
+ {
++    __le16 sq_id;
+ 	struct nvme_queue *nvmeq = data;
+ 	struct nvme_queue fake_nvmeq;
+ 	irqreturn_t ret = IRQ_NONE;
+@@ -1467,8 +1588,8 @@ static irqreturn_t nvme_irq_urgent(int irq, void *data)
+ 		if (nvmeq->cqes[fake_nvmeq.cq_head].command_id & URGENT_MASK) {
+ 			urgent++;
+ 			nvme_handle_cqe(nvmeq, fake_nvmeq.cq_head);
+-			nvmeq->cqes[fake_nvmeq.cq_head].command_id |= COMPLETED_MASK;
+-
++            sq_id = nvmeq->cqes[fake_nvmeq.cq_head].sq_id;
++            nvmeq->cqes[fake_nvmeq.cq_head].sq_id = cpu_to_le16(le16_to_cpu(sq_id) | COMPLETED_MASK);
+ 		}
+ 
+ 		nvme_update_cq_head(&fake_nvmeq);
+@@ -1609,7 +1730,12 @@ static int adapter_alloc_cq(struct nvme_dev *dev, u16 qid,
+ 	struct nvme_command c;
+ 	int flags = NVME_QUEUE_PHYS_CONTIG;
+ 
+-	if (vector != -1 && vector != irq_poller_target_queue_id)
++    bool enable = (vector != -1);
++    int i = 0;
++    for (; i < MAX_POLLER; i++) {
++        enable = enable && (vector != irq_poller_target_queue_id[i]);
++    }
++    if (enable)
+ 		flags |= NVME_CQ_IRQ_ENABLED;
+ 
+ 	/*
+@@ -2017,6 +2143,9 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
+ 
+ 	clear_bit(NVMEQ_DELETE_ERROR, &nvmeq->flags);
+ 
++	if (polled)
++		printk("HELLO THERE!  creating a polled queue with qid: %d", qid);
++
+ 	/*
+ 	 * A queue's vector matches the queue identifier unless the controller
+ 	 * has only one vector available.
+@@ -2037,9 +2166,12 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
+ 		goto release_cq;
+ 
+ 	nvmeq->cq_vector = vector;
++    //if (nvmeq->cq_vector != -1)
++		//printk("nvme creating a queue with IRQ vector number: %d, Linux IRQ number: %d", nvmeq->cq_vector, pci_irq_vector(to_pci_dev(nvmeq->dev->dev), nvmeq->cq_vector));
+ 	nvme_init_queue(nvmeq, qid);
+ 
+ 	if (vector != -1) {
++		//printk("NVME ABOUT TO request a pci_irq");
+ 		result = queue_request_irq(nvmeq);
+ 		if (result < 0)
+ 			goto release_sq;
+@@ -2617,6 +2749,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
+ 	struct pci_dev *pdev = to_pci_dev(dev->dev);
+ 	int result, nr_io_queues;
+ 	unsigned long size;
++    int i;
+ 
+ 	nr_io_queues = max_io_queues();
+ 	result = nvme_set_queue_count(&dev->ctrl, &nr_io_queues);
+@@ -2625,7 +2758,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
+ 
+ 	if (nr_io_queues == 0)
+ 		return 0;
+-
++	
+ 	clear_bit(NVMEQ_ENABLED, &adminq->flags);
+ 
+ 	if (dev->cmb_use_sqes) {
+@@ -2682,6 +2815,11 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
+ 	if (result || dev->online_queues < 2)
+ 		return result;
+ 
++    /* Init the barrier metadata array */
++    for (i = 0; i < MAX_QUEUES; i++) {
++        __per_queue_barriers[i].cur_barrier_gen = 1;
++        spin_lock_init(&__per_queue_barriers[i].barrier_lock);
++    }
+ 	irq_poller_init(dev);
+ 
+ 	if (dev->online_queues - 1 < dev->max_qid) {
+@@ -3325,8 +3463,9 @@ static void nvme_remove(struct pci_dev *pdev)
+ {
+ 	struct nvme_dev *dev = pci_get_drvdata(pdev);
+ 
+-	nvme_change_ctrl_state(&dev->ctrl, NVME_CTRL_DELETING);
+ 	irq_poller_shutdown();
++
++	nvme_change_ctrl_state(&dev->ctrl, NVME_CTRL_DELETING);
+ 	pci_set_drvdata(pdev, NULL);
+ 
+ 	if (!pci_device_is_present(pdev)) {
+diff --git a/drivers/nvme/host/pci_emul.c b/drivers/nvme/host/pci_emul.c
+index 1a3ad7b..11deb42 100644
+--- a/drivers/nvme/host/pci_emul.c
++++ b/drivers/nvme/host/pci_emul.c
+@@ -55,13 +55,11 @@
+ #define NVME_MAX_KB_SZ	4096
+ #define NVME_MAX_SEGS	127
+ 
+-#define URGENT_SHIFT    15
+-#define BARRIER_SHIFT   14
+-#define COMPLETED_SHIFT 13
++#define URGENT_MASK	0x8000
++#define COMPLETED_MASK	0x4000
+ 
+-#define URGENT_MASK	(1 << URGENT_SHIFT)
+-#define BARRIER_MASK	(1 << BARRIER_SHIFT)
+-#define COMPLETED_MASK	(1 << COMPLETED_SHIFT)
++/* Wait granularity, in us */
++#define WAIT_GRANULARITY    10
+ 
+ static int use_threaded_interrupts;
+ module_param(use_threaded_interrupts, int, 0);
+@@ -111,20 +109,22 @@ static bool empathetic = false;
+ module_param(empathetic, bool, 0444);
+ MODULE_PARM_DESC(empathetic, "Enable nvme interrupt emulator");
+ 
+-static int irq_poller_cpu = 0;
+-module_param(irq_poller_cpu, int, 0444);
+-MODULE_PARM_DESC(irq_poller_cpu, "Core id for the irq_poller, default 0");
++#define MAX_POLLER  4
++static int irq_poller_cpu[MAX_POLLER] = {5,6,7,8};
++module_param_array(irq_poller_cpu, int, NULL, 0444);
++MODULE_PARM_DESC(irq_poller_cpu, "Core id(s) for the irq_poller, default 5");
+ 
+-static int irq_poller_target_cpu = 1;
+-module_param(irq_poller_target_cpu, int, 0444);
++static int irq_poller_target_cpu[MAX_POLLER] = {1,2,3,4};
++module_param_array(irq_poller_target_cpu, int, NULL, 0444);
+ MODULE_PARM_DESC(irq_poller_target_cpu, "Completion queue core id, default 1");
+ 
+-static int irq_poller_target_queue_id = 2;
+-module_param(irq_poller_target_queue_id, int, 0444);
++static int irq_poller_target_queue_id[MAX_POLLER] = {5,9,13,2};
++//static int irq_poller_target_queue_id[MAX_POLLER] = {3,5,7};
++module_param_array(irq_poller_target_queue_id, int, NULL, 0444);
+ MODULE_PARM_DESC(irq_poller_target_queue_id, "Completion queue id, default 2");
+ 
+ static unsigned int irq_poller_thr = 0;
+-module_param(irq_poller_thr, uint, 0444);
++module_param(irq_poller_thr, uint, 0644);
+ MODULE_PARM_DESC(irq_poller_thr, "Poller IRQ Aggregation Threshold, range 0-255, default 0");
+ 
+ static unsigned int irq_poller_time = 0;
+@@ -132,7 +132,7 @@ module_param(irq_poller_time, uint, 0444);
+ MODULE_PARM_DESC(irq_poller_time, "Poller IRQ Aggregation Time, range 0-255 in 100 usec multiply, default 0");
+ 
+ static bool urgent_ooo = false;
+-module_param(urgent_ooo, bool, 0644);
++module_param(urgent_ooo, bool, 0444);
+ MODULE_PARM_DESC(urgent_ooo, "Process urgent request completion out of order, default is No");
+ 
+ static DECLARE_WAIT_QUEUE_HEAD(irq_poller_wait);
+@@ -982,36 +982,44 @@ static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
+ static void nvme_irq_helper(void *data);
+ 
+ struct irq_poller_data {
+-	int cpu;
+-	struct nvme_queue *queues; // dev->queues
++    int target_queue_id;
++	int target_cpu;
++	struct nvme_dev *dev; // dev
+ };
+-static struct task_struct *irq_poller_th;
++
++static struct task_struct *irq_poller_th[MAX_POLLER];
+ 
+ #define MAX_THR 0xFF
+ 
+ /* reset coalsc. time and threshold */
+ #define RESTART_THRESHOLD() do {			\
+ 	thr = 0;					\
+-	next_time = ktime_add_ns(ktime_get(), wait_time);\
+-	pending_timer = false;				\
++	next_time = ktime_add_ns(current_time, wait_time);\
++	pending_cqe = false;				\
+ } while(0)
+ 
+ // This kthread will poll for the given cpu's CQ, and send an IPI to the given cpu
+ static int irq_poller(void *data)
+ {
+-	//struct irq_poller_data *args = (struct irq_poller_data *) data;
+-	struct nvme_dev *dev = (struct nvme_dev *) data;
++    struct irq_poller_data *irq_data = (struct irq_poller_data *) data;
++
++	struct nvme_dev *dev = irq_data->dev;
++	int cpu = irq_data->target_cpu;
++	int queue_id = irq_data->target_queue_id;
++
+ 	struct pci_dev *pdev = to_pci_dev(dev->dev);
+-	int cpu = irq_poller_target_cpu;
+-	int queue_id = irq_poller_target_queue_id;
+ 	int thr = 0;
+-	bool pending_timer = false;
++	bool pending_cqe = false;
+ 	int wait = 0;
+ 
+ 	unsigned int irq_thr = irq_poller_thr <= MAX_THR ? irq_poller_thr : MAX_THR;
+ 	unsigned int irq_time = irq_poller_time <= MAX_THR ? irq_poller_time : MAX_THR;
+-	ktime_t wait_time = irq_time * 100 * NSEC_PER_USEC; /* in ns */
+-	ktime_t next_time;
++	ktime_t wait_time = irq_time * WAIT_GRANULARITY * NSEC_PER_USEC; /* in ns */
++	ktime_t current_time = ktime_get();
++	ktime_t next_time = ktime_add_ns(current_time, wait_time);
++
++    // Don't need this memory anymore
++    kfree(data);
+ 
+ 	struct nvme_queue *queue = &dev->queues[queue_id];
+ 	struct nvme_queue fake_queue = {
+@@ -1043,20 +1051,41 @@ static int irq_poller(void *data)
+ 						fake_queue.cq_head,
+ 						fake_queue.cq_phase)) {
+ 
++                /* on the first completion, rearm the timer */
++                if (thr == 0)
++                    next_time = ktime_add_ns(current_time, wait_time);
++
+ 				thr++;
+-				if (!pending_timer && (wait_time > 0)) {
++				current_time = ktime_get();
+ 
+-					next_time = ktime_add_ns(ktime_get(), wait_time);
+-					pending_timer = true;
++#if 0
++				if (queue->cqes[fake_queue.cq_head].command_id & URGENT_MASK) {
+ 
+-				}
++					if (urgent_ooo) {
++						smp_call_function_single(cpu, nvme_irq_helper_urgent, queue, wait);
++					} else {
++						smp_call_function_single(cpu, nvme_irq_helper, queue, wait);
++						RESTART_THRESHOLD();
++					}
+ 
++				} else
++#endif
+ 				if ((thr > irq_thr) ||
+-					(pending_timer && ktime_after(ktime_get(), next_time))) {
++					   (ktime_after(current_time, next_time))) {
+ 
+ 					smp_call_function_single(cpu, nvme_irq_helper, queue, wait);
+ 					RESTART_THRESHOLD();
+ 
++				} else {
++
++				/* We have pending completions but we didn't
++				 * fire an interrupt due to the coalescing.
++				 * We should generate an interrupt on timer
++				 * expiration if no more requests are
++				 * submitted.
++				 */
++
++					pending_cqe = true;
+ 				}
+ 
+ 				/* update local_cq_head and local_cq_phase */
+@@ -1064,20 +1093,18 @@ static int irq_poller(void *data)
+ 			}
+ 		}
+ 
+-		if (pending_timer && ktime_after(ktime_get(), next_time)) {
++		current_time = ktime_get();
++
++		if (pending_cqe && ktime_after(current_time, next_time)) {
+ 			smp_call_function_single(cpu, nvme_irq_helper, queue, wait);
+ 			RESTART_THRESHOLD();
+ 		}
+ 
+ 		if (need_resched())
+ 			schedule();
+-
+ 		cpu_relax();
+ 	}
+ 
+-	/* clean up before we shutdown poller */
+-	smp_call_function_single(cpu, nvme_irq_helper, queue, 1);
+-
+ 	enable_irq(pci_irq_vector(pdev, queue->cq_vector));
+ 
+ 	return 0;
+@@ -1085,29 +1112,39 @@ static int irq_poller(void *data)
+ 
+ static int irq_poller_init(struct nvme_dev *dev)
+ {
+-	int cpu = irq_poller_cpu;
+-	char thread_name[TASK_COMM_LEN];
+-
+-	if (irq_poller_th) {
+-		pr_err("irq_poller thread was already created %s : %u",
+-				get_task_comm(thread_name, irq_poller_th),
+-				task_tgid_nr(irq_poller_th));
+-		goto out;
++    int i = 0;
++    for (; i < MAX_POLLER; i++) {
++        int cpu = irq_poller_cpu[i];
++        char thread_name[TASK_COMM_LEN];
++
++        if (irq_poller_th[i]) {
++            pr_err("irq_poller thread was already created %s : %u",
++                    get_task_comm(thread_name, irq_poller_th[i]),
++                    task_tgid_nr(irq_poller_th[i]));
++            continue;
++        }
++
++        struct irq_poller_data *args = kmalloc(sizeof(struct irq_poller_data), GFP_KERNEL);
++        args->dev = dev;
++        args->target_cpu = irq_poller_target_cpu[i];
++        args->target_queue_id = irq_poller_target_queue_id[i];
++
++        sprintf(thread_name, "irq_poller_%d", cpu);
++        irq_poller_th[i] = kthread_create(irq_poller, args, thread_name);
++        kthread_bind(irq_poller_th[i], cpu);
++        wake_up_process(irq_poller_th[i]);
++    }
+ 
+-	}
+-
+-	sprintf(thread_name, "irq_poller_%d", cpu);
+-	irq_poller_th = kthread_create(irq_poller, dev, thread_name);
+-	kthread_bind(irq_poller_th, cpu);
+-	wake_up_process(irq_poller_th);
+-out:
+ 	return 0;
+ }
+ 
+ static void irq_poller_shutdown(void)
+ {
+-	if (irq_poller_th)
+-		kthread_stop(irq_poller_th);
++    int i = 0;
++    for (; i < MAX_POLLER; i++) {
++        if (irq_poller_th[i])
++            kthread_stop(irq_poller_th[i]);
++    }
+ }
+ 
+ 
+@@ -1355,7 +1392,12 @@ static int adapter_alloc_cq(struct nvme_dev *dev, u16 qid,
+ 	struct nvme_command c;
+ 	int flags = NVME_QUEUE_PHYS_CONTIG;
+ 
+-	if (vector != -1 && vector != irq_poller_target_queue_id)
++    bool enable = (vector != -1);
++    int i = 0;
++    for (; i < MAX_POLLER; i++) {
++        enable = enable && (vector != irq_poller_target_queue_id[i]);
++    }
++    if (enable)
+ 		flags |= NVME_CQ_IRQ_ENABLED;
+ 
+ 	/*
+@@ -1763,6 +1805,9 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
+ 
+ 	clear_bit(NVMEQ_DELETE_ERROR, &nvmeq->flags);
+ 
++	if (polled)
++		printk("HELLO THERE!  creating a polled queue with qid: %d", qid);
++
+ 	/*
+ 	 * A queue's vector matches the queue identifier unless the controller
+ 	 * has only one vector available.
+@@ -1783,9 +1828,12 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
+ 		goto release_cq;
+ 
+ 	nvmeq->cq_vector = vector;
++    if (nvmeq->cq_vector != -1)
++		printk("nvme creating a queue with IRQ vector number: %d, Linux IRQ number: %d", nvmeq->cq_vector, pci_irq_vector(to_pci_dev(nvmeq->dev->dev), nvmeq->cq_vector));
+ 	nvme_init_queue(nvmeq, qid);
+ 
+ 	if (vector != -1) {
++		printk("NVME ABOUT TO request a pci_irq");
+ 		result = queue_request_irq(nvmeq);
+ 		if (result < 0)
+ 			goto release_sq;
+@@ -2371,7 +2419,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
+ 
+ 	if (nr_io_queues == 0)
+ 		return 0;
+-
++	
+ 	clear_bit(NVMEQ_ENABLED, &adminq->flags);
+ 
+ 	if (dev->cmb_use_sqes) {
+@@ -3071,8 +3119,9 @@ static void nvme_remove(struct pci_dev *pdev)
+ {
+ 	struct nvme_dev *dev = pci_get_drvdata(pdev);
+ 
+-	nvme_change_ctrl_state(&dev->ctrl, NVME_CTRL_DELETING);
+ 	irq_poller_shutdown();
++
++	nvme_change_ctrl_state(&dev->ctrl, NVME_CTRL_DELETING);
+ 	pci_set_drvdata(pdev, NULL);
+ 
+ 	if (!pci_device_is_present(pdev)) {
+diff --git a/fs/aio.c b/fs/aio.c
+index 966ea5e..397cfc7 100644
+--- a/fs/aio.c
++++ b/fs/aio.c
+@@ -1470,6 +1470,10 @@ static int aio_prep_rw(struct kiocb *req, const struct iocb *iocb)
+ 	if (iocb->aio_flags & IOCB_FLAG_BARRIER) {
+ 		req->ki_flags |= IOCB_BARRIER;
+ 	}
++	
++    if (iocb->aio_flags & IOCB_FLAG_URGENT) {
++		req->ki_flags |= IOCB_URGENT;
++	}
+ 
+ 	ret = kiocb_set_rw_flags(req, iocb->aio_rw_flags);
+ 	if (unlikely(ret))
+@@ -1952,6 +1956,7 @@ SYSCALL_DEFINE3(io_submit, aio_context_t, ctx_id, long, nr,
+ 
+ 	if (nr > AIO_PLUG_THRESHOLD)
+ 		blk_start_plug(&plug);
++    
+ 	for (i = 0; i < nr; i++) {
+ 		struct iocb __user *user_iocb;
+ 
+@@ -1959,11 +1964,11 @@ SYSCALL_DEFINE3(io_submit, aio_context_t, ctx_id, long, nr,
+ 			ret = -EFAULT;
+ 			break;
+ 		}
+-	   	/*if (unlikely(i == nr-1)) {
++	   	if (unlikely(i == nr-1)) {
+ 			ret = io_submit_one_barrier(ctx, user_iocb, false);
+-		} else */
+-			
+-		ret = io_submit_one(ctx, user_iocb, false);
++		} else {
++			ret = io_submit_one(ctx, user_iocb, false);
++        }
+ 
+ 		if (ret)
+ 			break;
+diff --git a/fs/direct-io.c b/fs/direct-io.c
+index ec2fb6f..eaaf86e 100644
+--- a/fs/direct-io.c
++++ b/fs/direct-io.c
+@@ -1216,6 +1216,13 @@ do_blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
+ 	memset(dio, 0, offsetof(struct dio, pages));
+ 
+ 	dio->flags = flags;
++	// Now set the URGENT or BARRIER flags, so that any bio created from this
++	// dio will have the flags
++	if (iocb->ki_flags & IOCB_URGENT)
++		dio->op_flags |= REQ_URGENT;
++	if (iocb->ki_flags & IOCB_BARRIER)
++		dio->op_flags |= REQ_BARRIER;
++
+ 	if (dio->flags & DIO_LOCKING) {
+ 		if (iov_iter_rw(iter) == READ) {
+ 			struct address_space *mapping =
+diff --git a/include/uapi/linux/aio_abi.h b/include/uapi/linux/aio_abi.h
+index 8a92f61..9ac6793 100644
+--- a/include/uapi/linux/aio_abi.h
++++ b/include/uapi/linux/aio_abi.h
+@@ -56,6 +56,7 @@ enum {
+ #define IOCB_FLAG_RESFD		(1 << 0)
+ #define IOCB_FLAG_IOPRIO	(1 << 1)
+ #define IOCB_FLAG_BARRIER	(1 << 9)
++#define IOCB_FLAG_URGENT	(1 << 10)
+ 
+ /* read() from /dev/aio returns these structures. */
+ struct io_event {
+diff --git a/nvme-dante734-alpha.conf b/nvme-dante734-alpha.conf
+index 34f9fc7..6ad3048 100644
+--- a/nvme-dante734-alpha.conf
++++ b/nvme-dante734-alpha.conf
+@@ -1 +1 @@
+-params="empathetic=0 irq_poller_cpu=3 irq_poller_target_cpu=1 irq_poller_target_queue_id=15 irq_poller_max_thr=32 irq_poller_delay=15 urgent_ooo=0"
++params="empathetic=0 irq_poller_cpu=3 irq_poller_target_cpu=1 irq_poller_target_queue_id=15 irq_poller_max_thr=63 irq_poller_delay=3 urgent_ooo=0"

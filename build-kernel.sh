@@ -25,4 +25,9 @@ sudo make install
 popd
 popd
 
-echo "Done! Set proper grub entry and reboot."
+echo "Done."
+echo -n "Set grub to boot Linux 5.0.8-nvmecint kernel..."
+sudo grub-reboot "Ubuntu, with Linux 5.0.8-nvmecint"
+echo "Done."
+
+echo "You can reboot the machine now."

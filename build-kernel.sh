@@ -10,6 +10,9 @@ config=config-file
 
 pushd $kerneldir
 
+rm -rf $kernel01dir
+rm -rf $kernel02dir
+
 # first extract and compile kernel for microbenchamrks
 
 echo -n "Extracting kernel...."

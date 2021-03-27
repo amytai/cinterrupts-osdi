@@ -570,29 +570,6 @@ index 0524cd8..b00ed55 100644
  		flags |= NVME_CQ_IRQ_ENABLED;
  
  	/*
-@@ -2017,6 +2143,9 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
- 
- 	clear_bit(NVMEQ_DELETE_ERROR, &nvmeq->flags);
- 
-+	if (polled)
-+		printk("HELLO THERE!  creating a polled queue with qid: %d", qid);
-+
- 	/*
- 	 * A queue's vector matches the queue identifier unless the controller
- 	 * has only one vector available.
-@@ -2037,9 +2166,12 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
- 		goto release_cq;
- 
- 	nvmeq->cq_vector = vector;
-+    //if (nvmeq->cq_vector != -1)
-+		//printk("nvme creating a queue with IRQ vector number: %d, Linux IRQ number: %d", nvmeq->cq_vector, pci_irq_vector(to_pci_dev(nvmeq->dev->dev), nvmeq->cq_vector));
- 	nvme_init_queue(nvmeq, qid);
- 
- 	if (vector != -1) {
-+		//printk("NVME ABOUT TO request a pci_irq");
- 		result = queue_request_irq(nvmeq);
- 		if (result < 0)
- 			goto release_sq;
 @@ -2617,6 +2749,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
  	struct pci_dev *pdev = to_pci_dev(dev->dev);
  	int result, nr_io_queues;
@@ -894,38 +871,6 @@ index 1a3ad7b..11deb42 100644
  		flags |= NVME_CQ_IRQ_ENABLED;
  
  	/*
-@@ -1763,6 +1805,9 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
- 
- 	clear_bit(NVMEQ_DELETE_ERROR, &nvmeq->flags);
- 
-+	if (polled)
-+		printk("HELLO THERE!  creating a polled queue with qid: %d", qid);
-+
- 	/*
- 	 * A queue's vector matches the queue identifier unless the controller
- 	 * has only one vector available.
-@@ -1783,9 +1828,12 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
- 		goto release_cq;
- 
- 	nvmeq->cq_vector = vector;
-+    if (nvmeq->cq_vector != -1)
-+		printk("nvme creating a queue with IRQ vector number: %d, Linux IRQ number: %d", nvmeq->cq_vector, pci_irq_vector(to_pci_dev(nvmeq->dev->dev), nvmeq->cq_vector));
- 	nvme_init_queue(nvmeq, qid);
- 
- 	if (vector != -1) {
-+		printk("NVME ABOUT TO request a pci_irq");
- 		result = queue_request_irq(nvmeq);
- 		if (result < 0)
- 			goto release_sq;
-@@ -2371,7 +2419,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
- 
- 	if (nr_io_queues == 0)
- 		return 0;
--
-+	
- 	clear_bit(NVMEQ_ENABLED, &adminq->flags);
- 
- 	if (dev->cmb_use_sqes) {
 @@ -3071,8 +3119,9 @@ static void nvme_remove(struct pci_dev *pdev)
  {
  	struct nvme_dev *dev = pci_get_drvdata(pdev);

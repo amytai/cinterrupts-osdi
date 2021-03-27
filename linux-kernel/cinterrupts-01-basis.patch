@@ -7033,27 +7033,6 @@ index 0000000..1a3ad7b
 +MODULE_VERSION("1.0");
 +module_init(nvme_init);
 +module_exit(nvme_exit);
-diff --git a/drivers/pci/msi.c b/drivers/pci/msi.c
-index 4c0b478..a399275 100644
---- a/drivers/pci/msi.c
-+++ b/drivers/pci/msi.c
-@@ -37,6 +37,7 @@ static int pci_msi_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
- 	struct irq_domain *domain;
- 
- 	domain = dev_get_msi_domain(&dev->dev);
-+	printk("about to setup_msi_irqs, domain: %x", domain);
- 	if (domain && irq_domain_is_hierarchy(domain))
- 		return msi_domain_alloc_irqs(domain, &dev->dev, nvec);
- 
-@@ -93,6 +94,8 @@ int __weak arch_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
- 	struct msi_desc *entry;
- 	int ret;
- 
-+	printk("is there a chip? %x", chip);
-+
- 	if (chip && chip->setup_irqs)
- 		return chip->setup_irqs(chip, dev, nvec, type);
- 	/*
 diff --git a/fs/aio.c b/fs/aio.c
 index 3d9669d..966ea5e 100644
 --- a/fs/aio.c

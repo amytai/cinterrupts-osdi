@@ -31,8 +31,9 @@ TODO: information on how to access the machines.
 
 
 #### Reproducing each figure
-In the XXX/ subdirectory, we have scripts and instructions for
-reproducing the key figures in our paper.
+In the figX/ subdirectories, we have scripts and instructions for
+reproducing the key figures in our paper, e.g., `fig5` directory
+contain all scripts needed to reproduce `Figure 5` in the paper.
 
 
 ### Compilation instructions

@@ -38,13 +38,15 @@ mkdir $logdir
 load="rand_mix"
 runtime=60
 runs=$(seq 1 10)
+#ks="$(seq 0 16) 24 32 48 64"
+ks="16"
 sizes="4K"
-ks="$(seq 0 16) 24 32 48 64"
 
+# testing test.sh
 #runtime=15
 #runs="1 2 3"
 #sizes="4K"
-#ks="1 2 3 4"
+#ks="16"
 
 core=1
 other_core=7
@@ -73,11 +75,11 @@ function run_load {
 		before=$($count_script $dev_str $int_file)
 
 		if [ $k -eq 0 ]; then # run only pure sync
-		    sudo fio --section=psync --blocksize=$bs 		\
+		    sudo $fio_dir/fio --section=psync --blocksize=$bs 		\
 		       	--runtime=$runtime --output-format=terse 	\
 		 	--output="$log".out "$fio" >/dev/null &
 		else
-		    sudo fio --blocksize=$bs --runtime=$runtime 	\
+		    sudo $fio_dir/fio --blocksize=$bs --runtime=$runtime 	\
 			--iodepth=$k --iodepth_batch_submit=1		\
 			--iodepth_batch_complete_min=1			\
 			--iodepth_batch_complete_max=$k			\
@@ -137,55 +139,3 @@ run_load "cint-$cint_delay-$thr" "$driver" "$params"
 
 exit 0
 
-###########################################################
-
-# baseline0
-driver="nvme-emul.ko"
-params="irq_poller_cpu=3 irq_poller_target_cpu=1 irq_poller_target_queue_id=15 \
-	irq_poller_thr=0 irq_poller_time=0"
-run_load "baseline-0-0" "$driver" "$params"
-
-# alpha0
-driver="nvme.ko"
-params="empathetic=0 irq_poller_cpu=3 irq_poller_target_cpu=1	\
-	irq_poller_target_queue_id=15 irq_poller_max_thr=0	\
-	irq_poller_delay=0"
-run_load "alpha-0-0" "$driver" "$params"
-
-# cint-$delay-32-ooo
-driver="nvme.ko"
-params="empathetic=1 irq_poller_cpu=3 irq_poller_target_cpu=1 \
-	irq_poller_target_queue_id=15 irq_poller_max_thr=32 irq_poller_delay=$delay \
-	urgent_ooo=1"
-run_load "cint-"$delay"-32-ooo" "$driver" "$params"
-
-# baseline-100-32
-driver="nvme-emul.ko"
-params="irq_poller_cpu=3 irq_poller_target_cpu=1 irq_poller_target_queue_id=15 \
-	irq_poller_thr=32 irq_poller_time=1"
-run_load "baseline-100-32" "$driver" "$params"
-
-# alpha-$delay-32
-driver="nvme.ko"
-params="empathetic=0 irq_poller_cpu=3 irq_poller_target_cpu=1 \
-	irq_poller_target_queue_id=15 irq_poller_max_thr=32 irq_poller_delay=$delay \
-	urgent_ooo=0"
-run_load "alpha-"$delay"-32" "$driver" "$params"
-
-# cint-$delay-32
-driver="nvme.ko"
-params="empathetic=1 irq_poller_cpu=3 irq_poller_target_cpu=1 \
-	irq_poller_target_queue_id=15 irq_poller_max_thr=32 irq_poller_delay=$delay \
-	urgent_ooo=0"
-run_load "cint-"$delay"-32" "$driver" "$params"
-
-# cint-$delay-32-ooo
-driver="nvme.ko"
-params="empathetic=1 irq_poller_cpu=3 irq_poller_target_cpu=1 \
-	irq_poller_target_queue_id=15 irq_poller_max_thr=32 irq_poller_delay=$delay \
-	urgent_ooo=1"
-run_load "cint-"$delay"-32-ooo" "$driver" "$params"
-
-sudo cgdelete  -g cpu:$psync 2>/dev/null
-sudo cgdelete  -g cpu:$async 2>/dev/null
-sudo cgdelete  -g blkio:$async 2>/dev/null

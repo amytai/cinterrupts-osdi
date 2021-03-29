@@ -25,15 +25,11 @@ TODO: information on how to access the machines.
 * `fio/fio-3.12-barrier.patch` patch with cinterrupts support in fio + additional statistics added to fio as we used these in our results analysis
 * `build-fio.sh` script to extract fio source, apply cinterrupts patch and compile the fio
 * `utils` directory with scripts we use in our project
-* `fig5` directory with scripts to reproduce Figure 5 in the paper
+* `fig5` directory with scripts to reproduce Figure 5 in the paper, cd to `fig5` and run `make-all.sh`, see `fig5.pdf`
+* `fig6` directory with scripts to reproduce Figure 6 in the paper, cd to `fig6` and run `make-all.sh`, see `fig6.pdf`
 
 
 
-
-#### Reproducing each figure
-In the figX/ subdirectories, we have scripts and instructions for
-reproducing the key figures in our paper, e.g., `fig5` directory
-contain all scripts needed to reproduce `Figure 5` in the paper.
 
 
 ### Compilation instructions
@@ -112,8 +108,8 @@ Run `build-fio.sh` in the top-level directory of this repository.
 Path to fio from the top-level directory: `fio/fio-3.12/fio`
 If you can successfully run fio, you are ready!
 
-Now you can run the following experiments:
-TODO: decribe each experiment
+#Now you can run the following experiments:
+#TODO: decribe each experiment
 
 ### Running benchmarks
 You are welcome to clone and compile the following applications,
@@ -122,3 +118,11 @@ which are applications we modified for cinterrupts.
 - FIO
 - RocksDB
 - KVell
+
+#### Reproducing each figure
+In the figX/ subdirectories, we have scripts and instructions for
+reproducing the key figures in our paper, e.g., `fig5` directory
+contain all scripts needed to reproduce `Figure 5` in the paper.
+Enter to a figX directory and run `make-all.sh` script.
+See `figX.pdf` with test results.
+

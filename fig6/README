@@ -1,0 +1,5 @@
+test.sh		-- generates workload and save raw data results in `results` directory
+parse.sh 	-- parses raw data results and generates csv file
+parse-csv.sh	-- parses csv and generates data for gnuplot 
+fig6.gp		-- gnuplot script that generates eps figure
+make-all.sh	-- do all of the above

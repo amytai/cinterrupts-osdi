@@ -4,3 +4,15 @@ linux-kernel/linux-kernel-5.0.0-16.17.tgz
 fio/fio-3.12
 *.csv
 *.eps
+rocksdb/rocksdb-6.4.6
+fig*/results
+fig*/fig*.txt
+fig*/fig*.pdf
+fig14/p*.data
+fig15/*.out
+tab5*/*.out
+tab3/*.out
+kvell/*/*.o
+kvell/*.o
+kvell/benchcomponents
+kvell/microbench

@@ -1,0 +1,307 @@
+From a6bf0dcc3ac34e81879734a5681cd796ec1b1db3 Mon Sep 17 00:00:00 2001
+From: Amy Tai <amy.tai.2009@gmail.com>
+Date: Fri, 4 Dec 2020 15:49:06 -0800
+Subject: [PATCH 1/3] Changes to dump tool
+
+---
+ env/env.cc                 |  1 +
+ env/io_posix.cc            | 29 ++++++++++++++++++++++++-----
+ env/io_posix.h             |  2 ++
+ include/rocksdb/env.h      |  3 +++
+ include/rocksdb/options.h  |  2 ++
+ make_script.sh             |  2 ++
+ options/db_options.cc      |  1 +
+ options/db_options.h       |  1 +
+ options/options_helper.cc  |  1 +
+ tools/dump/db_dump_tool.cc |  6 +++++-
+ 10 files changed, 42 insertions(+), 6 deletions(-)
+ create mode 100644 make_script.sh
+
+diff --git a/env/env.cc b/env/env.cc
+index 4c222cf..07d24cc 100644
+--- a/env/env.cc
++++ b/env/env.cc
+@@ -380,6 +380,7 @@ void AssignEnvOptions(EnvOptions* env_options, const DBOptions& options) {
+   env_options->use_mmap_reads = options.allow_mmap_reads;
+   env_options->use_mmap_writes = options.allow_mmap_writes;
+   env_options->use_direct_reads = options.use_direct_reads;
++  env_options->disable_urgent = options.disable_urgent;
+   env_options->set_fd_cloexec = options.is_fd_close_on_exec;
+   env_options->bytes_per_sync = options.bytes_per_sync;
+   env_options->compaction_readahead_size = options.compaction_readahead_size;
+diff --git a/env/io_posix.cc b/env/io_posix.cc
+index bcc9ab5..d32051a 100644
+--- a/env/io_posix.cc
++++ b/env/io_posix.cc
+@@ -34,6 +34,9 @@
+ #include "util/coding.h"
+ #include "util/string_util.h"
+ 
++#include <sys/uio.h>
++#define RWF_URGENT  0x00000020
++
+ #if defined(OS_LINUX) && !defined(F_SET_RW_HINT)
+ #define F_LINUX_SPECIFIC_BASE 1024
+ #define F_SET_RW_HINT (F_LINUX_SPECIFIC_BASE + 12)
+@@ -62,7 +65,7 @@ namespace {
+ // cutting the buffer in 1GB chunks. We use this chunk size to be sure to keep
+ // the writes aligned.
+ 
+-bool PosixWrite(int fd, const char* buf, size_t nbyte) {
++bool PosixWrite(int fd, const char* buf, size_t nbyte, bool disable_urgent) {
+   const size_t kLimit1Gb = 1UL << 30;
+ 
+   const char* src = buf;
+@@ -71,7 +74,14 @@ bool PosixWrite(int fd, const char* buf, size_t nbyte) {
+   while (left != 0) {
+     size_t bytes_to_write = std::min(left, kLimit1Gb);
+ 
+-    ssize_t done = write(fd, src, bytes_to_write);
++    ssize_t done;
++    if (disable_urgent) {
++        done = write(fd, src, bytes_to_write);
++    }
++    else {
++        struct iovec iov = {.iov_base = const_cast<char *>(src), .iov_len = bytes_to_write};
++        done = pwritev2(fd, &iov, 1, -1, RWF_URGENT);
++    }
+     if (done < 0) {
+       if (errno == EINTR) {
+         continue;
+@@ -411,6 +421,7 @@ PosixRandomAccessFile::PosixRandomAccessFile(const std::string& fname, int fd,
+     : filename_(fname),
+       fd_(fd),
+       use_direct_io_(options.use_direct_reads),
++      disable_urgent_(options.disable_urgent),
+       logical_sector_size_(GetLogicalBufferSize(fd_)) {
+   assert(!options.use_direct_reads || !options.use_mmap_reads);
+   assert(!options.use_mmap_reads || sizeof(void*) < 8);
+@@ -430,7 +441,14 @@ Status PosixRandomAccessFile::Read(uint64_t offset, size_t n, Slice* result,
+   size_t left = n;
+   char* ptr = scratch;
+   while (left > 0) {
+-    r = pread(fd_, ptr, left, static_cast<off_t>(offset));
++    if (disable_urgent_) {
++        r = pread(fd_, ptr, left, static_cast<off_t>(offset));
++    }
++    else {
++        struct iovec iov = {.iov_base = ptr, .iov_len = left};
++        r = preadv2(fd_, &iov, 1, static_cast<off_t>(offset), RWF_URGENT);
++    }
++        
+     if (r <= 0) {
+       if (r == -1 && errno == EINTR) {
+         continue;
+@@ -832,6 +850,7 @@ PosixWritableFile::PosixWritableFile(const std::string& fname, int fd,
+     : WritableFile(options),
+       filename_(fname),
+       use_direct_io_(options.use_direct_writes),
++      disable_urgent_(options.disable_urgent),
+       fd_(fd),
+       filesize_(0),
+       logical_sector_size_(GetLogicalBufferSize(fd_)) {
+@@ -858,8 +877,8 @@ Status PosixWritableFile::Append(const Slice& data) {
+   }
+   const char* src = data.data();
+   size_t nbytes = data.size();
+-
+-  if (!PosixWrite(fd_, src, nbytes)) {
++    
++  if (!PosixWrite(fd_, src, nbytes, disable_urgent_)) {
+     return IOError("While appending to file", filename_, errno);
+   }
+ 
+diff --git a/env/io_posix.h b/env/io_posix.h
+index 815be80..b315457 100644
+--- a/env/io_posix.h
++++ b/env/io_posix.h
+@@ -84,6 +84,7 @@ class PosixRandomAccessFile : public RandomAccessFile {
+   std::string filename_;
+   int fd_;
+   bool use_direct_io_;
++  bool disable_urgent_;
+   size_t logical_sector_size_;
+ 
+  public:
+@@ -111,6 +112,7 @@ class PosixWritableFile : public WritableFile {
+  protected:
+   const std::string filename_;
+   const bool use_direct_io_;
++  const bool disable_urgent_;
+   int fd_;
+   uint64_t filesize_;
+   size_t logical_sector_size_;
+diff --git a/include/rocksdb/env.h b/include/rocksdb/env.h
+index 398a7ff..73c6562 100644
+--- a/include/rocksdb/env.h
++++ b/include/rocksdb/env.h
+@@ -80,6 +80,9 @@ struct EnvOptions {
+   // If true, then use O_DIRECT for writing data
+   bool use_direct_writes = false;
+ 
++  // If true, use urgent flag for pread/pwrite calls
++  bool disable_urgent = false;
++
+   // If false, fallocate() calls are bypassed
+   bool allow_fallocate = true;
+ 
+diff --git a/include/rocksdb/options.h b/include/rocksdb/options.h
+index 5ae010b..02a527d 100644
+--- a/include/rocksdb/options.h
++++ b/include/rocksdb/options.h
+@@ -675,6 +675,8 @@ struct DBOptions {
+   // Default: false
+   // Not supported in ROCKSDB_LITE mode!
+   bool use_direct_io_for_flush_and_compaction = false;
++  
++  bool disable_urgent = false;
+ 
+   // If false, fallocate() calls are bypassed
+   bool allow_fallocate = true;
+diff --git a/make_script.sh b/make_script.sh
+new file mode 100644
+index 0000000..71e67b8
+--- /dev/null
++++ b/make_script.sh
+@@ -0,0 +1,2 @@
++#!/bin/bash
++make clean; make -j8 release
+diff --git a/options/db_options.cc b/options/db_options.cc
+index 3756c55..c97f6eb 100644
+--- a/options/db_options.cc
++++ b/options/db_options.cc
+@@ -50,6 +50,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
+       use_direct_reads(options.use_direct_reads),
+       use_direct_io_for_flush_and_compaction(
+           options.use_direct_io_for_flush_and_compaction),
++      disable_urgent(options.disable_urgent),
+       allow_fallocate(options.allow_fallocate),
+       is_fd_close_on_exec(options.is_fd_close_on_exec),
+       advise_random_on_open(options.advise_random_on_open),
+diff --git a/options/db_options.h b/options/db_options.h
+index e39e290..ad5b00a 100644
+--- a/options/db_options.h
++++ b/options/db_options.h
+@@ -48,6 +48,7 @@ struct ImmutableDBOptions {
+   bool allow_mmap_writes;
+   bool use_direct_reads;
+   bool use_direct_io_for_flush_and_compaction;
++  bool disable_urgent;
+   bool allow_fallocate;
+   bool is_fd_close_on_exec;
+   bool advise_random_on_open;
+diff --git a/options/options_helper.cc b/options/options_helper.cc
+index 5733cee..56c0966 100644
+--- a/options/options_helper.cc
++++ b/options/options_helper.cc
+@@ -77,6 +77,7 @@ DBOptions BuildDBOptions(const ImmutableDBOptions& immutable_db_options,
+   options.allow_mmap_reads = immutable_db_options.allow_mmap_reads;
+   options.allow_mmap_writes = immutable_db_options.allow_mmap_writes;
+   options.use_direct_reads = immutable_db_options.use_direct_reads;
++  options.disable_urgent = immutable_db_options.disable_urgent;
+   options.use_direct_io_for_flush_and_compaction =
+       immutable_db_options.use_direct_io_for_flush_and_compaction;
+   options.allow_fallocate = immutable_db_options.allow_fallocate;
+diff --git a/tools/dump/db_dump_tool.cc b/tools/dump/db_dump_tool.cc
+index 06a47ce..83c3e65 100644
+--- a/tools/dump/db_dump_tool.cc
++++ b/tools/dump/db_dump_tool.cc
+@@ -32,6 +32,7 @@ bool DbDumpTool::Run(const DumpOptions& dump_options,
+ 
+   // Open the database
+   options.create_if_missing = false;
++  options.disable_urgent = true;
+   status = rocksdb::DB::OpenForReadOnly(options, dump_options.db_path, &dbptr);
+   if (!status.ok()) {
+     std::cerr << "Unable to open database '" << dump_options.db_path
+@@ -41,8 +42,11 @@ bool DbDumpTool::Run(const DumpOptions& dump_options,
+ 
+   const std::unique_ptr<rocksdb::DB> db(dbptr);
+ 
++  EnvOptions env_options = rocksdb::EnvOptions();
++  env_options.disable_urgent = true;
++
+   status = env->NewWritableFile(dump_options.dump_location, &dumpfile,
+-                                rocksdb::EnvOptions());
++                                env_options);
+   if (!status.ok()) {
+     std::cerr << "Unable to open dump file '" << dump_options.dump_location
+               << "' for writing: " << status.ToString() << std::endl;
+-- 
+2.7.4
+
+
+From 003c66948bf2e386edda294ed18008b4666f4205 Mon Sep 17 00:00:00 2001
+From: Amy Tai <amy.tai.2009@gmail.com>
+Date: Tue, 30 Mar 2021 20:13:39 +0300
+Subject: [PATCH 2/3] Misc
+
+---
+ make_script.sh            | 2 +-
+ options/options_helper.cc | 3 +++
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+ mode change 100644 => 100755 make_script.sh
+
+diff --git a/make_script.sh b/make_script.sh
+old mode 100644
+new mode 100755
+index 71e67b8..9285b05
+--- a/make_script.sh
++++ b/make_script.sh
+@@ -1,2 +1,2 @@
+ #!/bin/bash
+-make clean; make -j8 release
++make clean; make -j16 release
+diff --git a/options/options_helper.cc b/options/options_helper.cc
+index 56c0966..557a00c 100644
+--- a/options/options_helper.cc
++++ b/options/options_helper.cc
+@@ -1430,6 +1430,9 @@ std::unordered_map<std::string, OptionTypeInfo>
+         {"use_direct_reads",
+          {offsetof(struct DBOptions, use_direct_reads), OptionType::kBoolean,
+           OptionVerificationType::kNormal, false, 0}},
++        {"disable_urgent",
++         {offsetof(struct DBOptions, disable_urgent), OptionType::kBoolean,
++          OptionVerificationType::kNormal, false, 0}},
+         {"use_direct_writes",
+          {0, OptionType::kBoolean, OptionVerificationType::kDeprecated, false,
+           0}},
+-- 
+2.7.4
+
+
+From 614cffd9200851c799abb72dcecd1928f6ab1f3f Mon Sep 17 00:00:00 2001
+From: Amy Tai <amy.tai.2009@gmail.com>
+Date: Tue, 30 Mar 2021 21:38:17 +0300
+Subject: [PATCH 3/3] Use preadv2
+
+---
+ env/io_posix.cc | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/env/io_posix.cc b/env/io_posix.cc
+index d32051a..d0bab2f 100644
+--- a/env/io_posix.cc
++++ b/env/io_posix.cc
+@@ -79,8 +79,7 @@ bool PosixWrite(int fd, const char* buf, size_t nbyte, bool disable_urgent) {
+         done = write(fd, src, bytes_to_write);
+     }
+     else {
+-        struct iovec iov = {.iov_base = const_cast<char *>(src), .iov_len = bytes_to_write};
+-        done = pwritev2(fd, &iov, 1, -1, RWF_URGENT);
++	done = write(fd, src, bytes_to_write);
+     }
+     if (done < 0) {
+       if (errno == EINTR) {
+@@ -446,7 +445,7 @@ Status PosixRandomAccessFile::Read(uint64_t offset, size_t n, Slice* result,
+     }
+     else {
+         struct iovec iov = {.iov_base = ptr, .iov_len = left};
+-        r = preadv2(fd_, &iov, 1, static_cast<off_t>(offset), RWF_URGENT);
++        r = syscall(327, fd_, &iov, 1, static_cast<off_t>(offset), 0, RWF_URGENT);
+     }
+         
+     if (r <= 0) {
+-- 
+2.7.4
+

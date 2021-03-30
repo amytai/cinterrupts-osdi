@@ -1,0 +1,2 @@
+all.sh	 -- run the benchmark
+parse.sh -- parse the results and return the result in table form

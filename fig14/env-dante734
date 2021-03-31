@@ -1,0 +1,6 @@
+scripts_dir="/homes/xrevolver/src/nvme_int"
+drv_dir="/homes/xrevolver/src/kernel/nvme-kernel/drivers/nvme/host"
+
+# for Optane delay is 6, for P3700 delay is 15
+delay=15
+

@@ -1,4 +1,8 @@
 #!/bin/bash
+sudo sh -c "echo 2000000 > /sys/devices/system/cpu/cpu9/cpufreq/scaling_min_freq"
+sudo sh -c "echo 2000000 > /sys/devices/system/cpu/cpu5/cpufreq/scaling_min_freq"
+sudo sh -c "echo 2000000 > /sys/devices/system/cpu/cpu3/cpufreq/scaling_min_freq"
+sudo sh -c "echo 2000000 > /sys/devices/system/cpu/cpu1/cpufreq/scaling_min_freq"
 
 rocksdbdir=../rocksdb/rocksdb-6.4.6
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-rocksdbdir=rocksdb-6.4.6
+rocksdbdir=../rocksdb/rocksdb-6.4.6
 
 rm -rf results
 mkdir results/

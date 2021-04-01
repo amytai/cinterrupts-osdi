@@ -6,18 +6,18 @@ echo "Scan Latency Histograms:"
 echo "-------------------" >> default.cdf.out.tmp
 echo "default            " >> default.cdf.out.tmp
 echo "-------------------" >> default.cdf.out.tmp
-grep "id:" results/scan_raw_N_0_0_0.out | awk '{print $3}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > default.in.tmp
+grep "id:" results/scan_raw_N_0_0_3.out | awk '{print $3}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > default.in.tmp
 
 echo "-------------------" >> cint.cdf.out.tmp
 echo "cint" >> cint.cdf.out.tmp
 echo "-------------------" >> cint.cdf.out.tmp
-grep "id:" results/scan_raw_Y_32_15_0.out | awk '{print $3}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > cint.in.tmp
+grep "id:" results/scan_raw_Y_32_15_3.out | awk '{print $3}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > cint.in.tmp
 
 
 echo "-------------------" >> adaptive.cdf.out.tmp
 echo "adaptive" >> adaptive.cdf.out.tmp
 echo "-------------------" >> adaptive.cdf.out.tmp
-grep "id:" results/scan_raw_N_32_15_0.out | awk '{print $3}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > adaptive.in.tmp
+grep "id:" results/scan_raw_N_32_15_3.out | awk '{print $3}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > adaptive.in.tmp
 
 # Now get the minimum
 cat default.in.tmp >> min.tmp

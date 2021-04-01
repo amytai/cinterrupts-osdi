@@ -1,6 +1,7 @@
-scan.sh		-- script to run the scan benchmark (YCSB-E) of KVell
+run.sh		-- script to run the scan benchmark (YCSB-E) of KVell, for scan lengths 16 and 256
 
-cdf.sh		-- script to generate the CDF of scan latencies (Fig 17) for scans of length 256
-throughput.sh	-- script to generate table of scan throughput
+parse.sh	-- script to generate the CDF of scan latencies (Fig 17) for scans of length 16 and 256, as well as scan throughput (Table 5)
 
-NOTE for cdf.sh: you might need to manually toggle the bucket size of the histogram by uncommenting and manually setting the bucket size in line 32 of cdf.sh
+NOTE for cdf.sh: you might need to manually toggle the bucket size of the histogram by uncommenting and manually setting the bucket size in line 36 and 38 of cdf.sh
+
+Results are in *.out files after running run.sh;parse.sh

@@ -1,2 +1,3 @@
-run.sh		-- script to run the readwhilewriting and readrandom experiments for RocksDB
-parse.sh	-- script to parse the results
+run-4.sh		-- script to run the readwhilewriting and readrandom experiments for RocksDB, 4 threads
+run-8.sh		-- script to run the readwhilewriting and readrandom experiments for RocksDB, 8 threads
+parse.sh		-- script to parse the results

@@ -1,9 +1,13 @@
 #!/bin/bash
+sudo sh -c "echo 2000000 > /sys/devices/system/cpu/cpu9/cpufreq/scaling_min_freq"
+sudo sh -c "echo 2000000 > /sys/devices/system/cpu/cpu5/cpufreq/scaling_min_freq"
+sudo sh -c "echo 2000000 > /sys/devices/system/cpu/cpu3/cpufreq/scaling_min_freq"
+sudo sh -c "echo 2000000 > /sys/devices/system/cpu/cpu1/cpufreq/scaling_min_freq"
 
 rocksdbdir=../rocksdb/rocksdb-6.4.6
 
-rm -rf results
-mkdir results/
+rm -rf results8
+mkdir results8/
 
 sudo umount /dev/nvme0n1p1
 sudo umount /dev/nvme0n1p2
@@ -28,7 +32,7 @@ echo ""
 
 sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"
 sleep 3
-sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readwhilewriting --threads=3 -duration=30  --key_size=16 --value_size=1024 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results/readwhilewriting_default_${i}
+sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readwhilewriting --threads=7 -duration=30  --key_size=16 --value_size=1024 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results8/readwhilewriting_default_${i}
 
 df -h
 sleep 10
@@ -44,7 +48,7 @@ for i in {1..5}
 do
 
 sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"
-sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readrandom --threads=4  --key_size=16 --value_size=1024  --reads=100000 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results/readrandom_default_${i}
+sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readrandom --threads=8  --key_size=16 --value_size=1024  --reads=100000 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results8/readrandom_default_${i}
 
 df -h
 sleep 10
@@ -65,7 +69,7 @@ for i in {1..5}
 do
 sudo rm -rf /scratch2/*; sync; sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"; sudo numactl -C 1 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=fillbatch --threads=1  --key_size=16 --value_size=1024 --num=20000000  --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -batch_size=4000 -compression_type=none
 
-sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readwhilewriting --threads=3 -duration=30  --key_size=16 --value_size=1024 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results/readwhilewriting_adaptive_${i}
+sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readwhilewriting --threads=7 -duration=30  --key_size=16 --value_size=1024 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results8/readwhilewriting_adaptive_${i}
 
 sleep 10
 done
@@ -79,7 +83,7 @@ sudo rm -rf /scratch2/*; sync; sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"; s
 for i in {1..5}
 do
 
-sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readrandom --threads=4  --key_size=16 --value_size=1024 --num=20000000 --reads=100000 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results/readrandom_adaptive_${i}
+sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readrandom --threads=8  --key_size=16 --value_size=1024 --num=20000000 --reads=100000 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results8/readrandom_adaptive_${i}
 
 df -h
 sleep 10
@@ -100,7 +104,7 @@ for i in {1..5}
 do
 sudo rm -rf /scratch2/*; sync; sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"; sudo numactl -C 1 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=fillbatch --threads=1  --key_size=16 --value_size=1024 --num=20000000  --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -batch_size=4000 -compression_type=none
 
-sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readwhilewriting --threads=3 -duration=30  --key_size=16 --value_size=1024 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results/readwhilewriting_cint_${i}
+sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readwhilewriting --threads=7 -duration=30  --key_size=16 --value_size=1024 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results8/readwhilewriting_cint_${i}
 
 df -h
 sleep 10
@@ -115,7 +119,7 @@ sudo rm -rf /scratch2/*; sync; sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"; s
 for i in {1..5}
 do
 
-sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readrandom --threads=4  --key_size=16 --value_size=1024 --num=20000000 --reads=100000 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results/readrandom_cint_${i}
+sudo numactl -C 1,5 ./${rocksdbdir}/db_bench --db=/scratch2/ --benchmarks=readrandom --threads=8  --key_size=16 --value_size=1024 --num=20000000 --reads=100000 -use_existing_db=true --disable_auto_compactions=true --use_direct_io_for_flush_and_compaction=true --use_direct_reads=true -compression_type=none -statistics > results8/readrandom_cint_${i}
 
 df -h
 sleep 10

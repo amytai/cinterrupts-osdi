@@ -4,21 +4,10 @@ dir=results$1
 javac Cdf.java
 rm *.tmp
 
-echo "Scan Latency Histograms:"
-echo "-------------------" >> default.cdf.out.tmp
-echo "default            " >> default.cdf.out.tmp
-echo "-------------------" >> default.cdf.out.tmp
 grep "id:" ${dir}/scan_raw_N_0_0_4.out | awk '{print int($4/1000)}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > default.in.tmp
 
-echo "-------------------" >> cint.cdf.out.tmp
-echo "cint" >> cint.cdf.out.tmp
-echo "-------------------" >> cint.cdf.out.tmp
 grep "id:" ${dir}/scan_raw_Y_32_15_4.out | awk '{print int($4/1000)}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > cint.in.tmp
 
-
-echo "-------------------" >> adaptive.cdf.out.tmp
-echo "adaptive" >> adaptive.cdf.out.tmp
-echo "-------------------" >> adaptive.cdf.out.tmp
 grep "id:" ${dir}/scan_raw_N_32_15_4.out | awk '{print int($4/1000)}' | awk -F',' '{print $1}' | tail -n 3000 | head -n 1000 > adaptive.in.tmp
 
 # Now get the minimum
@@ -38,11 +27,8 @@ else
 	bucket=200
 fi
 
-java Cdf default.in.tmp ${min} ${bucket} >> default.cdf.out.tmp
-java Cdf cint.in.tmp ${min} ${bucket} >> cint.cdf.out.tmp
-java Cdf adaptive.in.tmp ${min} ${bucket} >> adaptive.cdf.out.tmp
+java Cdf default.in.tmp ${min} ${bucket} > default_cdf_$1.dat
+java Cdf cint.in.tmp ${min} ${bucket} > cint_cdf_$1.dat
+java Cdf adaptive.in.tmp ${min} ${bucket} > adaptive_cdf_$1.dat
 
-paste default.cdf.out.tmp cint.cdf.out.tmp adaptive.cdf.out.tmp | column -s $'\t' -t > cdf$1.out
-cat cdf.out
-echo "Output also written to cdf$1.out"
 rm *.tmp

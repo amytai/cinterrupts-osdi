@@ -1,2 +1,7 @@
-all.sh	 -- run the benchmark
-parse.sh -- parse the results and return the result in table form
+all.sh	 	-- run the benchmark
+parse.sh 	-- parse the results and generate fig16.pdf
+fig16.gp	-- gnuplot script that generates fig16.gp. This is called from parse.sh.
+		   You shouldnot need to call it manually.
+
+Output files:
+fig16.pdf	-- Figure 16 in the paper

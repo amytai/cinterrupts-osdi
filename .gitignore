@@ -6,6 +6,7 @@ fio/fio-3.12
 *.eps
 rocksdb/rocksdb-6.4.6
 fig*/results
+fig*/results_*
 fig*/fig*.txt
 fig*/fig*.pdf
 fig14/p*.data

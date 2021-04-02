@@ -1,6 +1,0 @@
-fillbatch.sh		-- script to run the fillbatch experiment
-parse_fillbatch.sh	-- script to parse the results
-make-all.sh		-- run the two preceding scripts
-
-Output files:
-all.out			-- contains data for Table 3 in the paper

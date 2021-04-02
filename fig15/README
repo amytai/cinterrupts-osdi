@@ -1,8 +1,0 @@
-run-4.sh		-- script to run the readwhilewriting and readrandom experiments for RocksDB, 4 threads
-run-8.sh		-- script to run the readwhilewriting and readrandom experiments for RocksDB, 8 threads
-parse.sh		-- script to parse the results
-make-all.sh		-- run all 3 preceding scripts
-
-Output files:
-fig15-latency.pdf	-- top half of Figure 15 in the paper
-fig15-iops.pdf		-- bottom half of Figure 15 in the paper

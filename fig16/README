@@ -1,8 +1,0 @@
-all.sh	 	-- run the benchmark
-parse.sh 	-- parse the results and generate fig16.pdf
-make-all.sh	-- run the 2 preceding scripts
-fig16.gp	-- gnuplot script that generates fig16.gp. This is called from parse.sh.
-		   You should not need to call it manually.
-
-Output files:
-fig16.pdf	-- Figure 16 in the paper

@@ -129,9 +129,11 @@ which are applications we modified for cinterrupts.
 In the figX/ subdirectories, we have scripts and instructions for
 reproducing the key figures in our paper, e.g., `fig5` directory
 contain all scripts needed to reproduce `Figure 5` in the paper.
-Enter to a figX directory and run `make-all.sh` or `parse.sh` script (refer to
-each directory's README for the correct script).
-See `figX.pdf` with test results.
+Enter to a figX directory and run `make-all.sh`.
+See `figX.pdf` with test results, but please check README for
+each directory to confirm output. For example, results for tables
+in the paper  are
+stored directly in *.out files.
 
 > Pay attention, for microbenchmarks,
 > our scripts run each benchmark 10 times, 60 seconds each run.

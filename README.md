@@ -113,8 +113,8 @@ Run `build-fio.sh` in the top-level directory of this repository.
 Path to fio from the top-level directory: `fio/fio-3.12/fio`
 If you can successfully run fio, you are ready!
 
-#Now you can run the following experiments:
-#TODO: decribe each experiment
+[//]: # (Now you can run the following experiments:)
+[//]: # (TODO: decribe each experiment)
 
 ### Running benchmarks
 You are welcome to clone and compile the following applications,

@@ -106,7 +106,7 @@ EOF
 
 # mixed, no throttling
 #data_dir="../mixed_bars/p4800/mitigations_off_psync_512_sz_irq_acct_run2"
-data_dir="test_results_nortlm"
+data_dir="results_nortlm"
 #out="$model-4k.dat"
 do_parsing "$out" "$data_dir"
 
@@ -117,7 +117,7 @@ cat <<EOF >> $out
 EOF
 
 # mixed, with throttling async
-data_dir="../mixed_bars/p4800/mitigations_off_psync_512_sz_io_throttled_alpha0_irq_acct"
-data_dir="test_results_rtlm"
+#data_dir="../mixed_bars/p4800/mitigations_off_psync_512_sz_io_throttled_alpha0_irq_acct"
+data_dir="results_rtlm"
 #out="$model-4k-rlmt.dat"
 do_parsing "$out" "$data_dir"

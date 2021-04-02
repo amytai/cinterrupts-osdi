@@ -11,7 +11,7 @@ an environment for the evaluators on our machine.
 
 #### Accessing the evaluation environment
 Please contact authors how to access the setup with installed hardware and preconfigured building environment.
-
+(Account username/password and machine IPs are privileged information that we prefer to send out-of-band.)
 
 ### Content of the repository
 * `linux-kernel` directory with Linux kernel sources and cinterrupts patch
@@ -53,8 +53,8 @@ our kernels into `linux-kernel/linux-kernel-5.0.0-16.17-nvmecint` and
 `linux-kernel/linux-kernel-5.0.0-16.17-nvmecint-rocks` directories.
 
 We install two kernels:
-* `5.0.8-nvmecint` is used to test microbenchamrks, it emulates a single SQ/CQ pair.
-* `5.0.8-nvmecint-rocks` is used to test multithreaded macrobenchamrks,
+* `5.0.8-nvmecint` is used to test microbenchmarks (fig5,fig6,fig7,fig10,fig14), it emulates a single SQ/CQ pair.
+* `5.0.8-nvmecint-rocks` is used to test multithreaded macrobenchmarks (fig15,fig16,tab3,tab5+fig17),
    same as above with the addition of multiple SQ/CQ pairs emulation.
 
 To boot into `5.0.8-nvmecint` kernel run:
@@ -118,22 +118,28 @@ If you can successfully run fio, you are ready!
 [//]: # (TODO: decribe each experiment)
 
 ### Running benchmarks
-You are welcome to clone and compile the following applications,
+You should compile the following applications,
 which are applications we modified for cinterrupts.
 
 - FIO (just run `build-fio.sh` script in the top-level directory)
-- RocksDB
-- KVell
+- RocksDB (just run `build-rocksdb.sh` in the top-level directory)
+- KVell (just run `build-kvell.sh` in the top-level directory)
 
 #### Reproducing each figure
 In the figX/ subdirectories, we have scripts and instructions for
 reproducing the key figures in our paper, e.g., `fig5` directory
 contain all scripts needed to reproduce `Figure 5` in the paper.
-Enter to a figX directory and run `make-all.sh` script.
+Enter to a figX directory and run `make-all.sh` or `parse.sh` script (refer to
+each directory's README for the correct script).
 See `figX.pdf` with test results.
 
-> Pay attention, our scripts run each benchmark 10 times, 60 seconds each run.
+> Pay attention, for microbenchmarks,
+> our scripts run each benchmark 10 times, 60 seconds each run.
 > Since there are multiple flavours of each test the total runtime
 > can be very long. To reduce total runtime evaluators can
 > change `runtime` and `runs` variables in the test scripts.
+>
+> For macrobenchmarks, experiments can also take a while to run (up to 45 min)
+> as they run each benchmark 5 times. Consider using tmux to
+> make sure the benchmark continues to run even if ssh connection is broken.
 

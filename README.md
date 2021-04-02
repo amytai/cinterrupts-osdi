@@ -27,10 +27,14 @@ TODO: information on how to access the machines.
 * `utils` directory with scripts we use in our project
 * `fig5` directory with scripts to reproduce Figure 5 in the paper, cd to `fig5` and run `make-all.sh`, see `fig5.pdf`
 * `fig6` directory with scripts to reproduce Figure 6 in the paper, cd to `fig6` and run `make-all.sh`, see `fig6.pdf`
+* `fig10` directory with scripts to reproduce Figure 10 in the paper, cd to `fig10` and run `make-all.sh`, see `fig10.pdf`
 * `fig14` directory with scripts to reproduce Figure 14 in the paper, cd to `fig14` and run `make-all.sh`, see `fig14.pdf`
-
-
-
+* `fig15` directory with scripts to reproduce Figure 15 in the paper, cd to `fig15` and refer to `README`
+* `fig16` directory with scripts to reproduce Figure 16 in the paper, cd to `fig16` and refer to `README`
+* `rocksdb` directory with `cint.patch` and RocksDB v6.4.6 sources
+* `kvell` directory with KVell sources
+* `tab3` directory with scripts to reproduce Table 3 in the paper, cd to `tab3` and refer to `README`
+* `tab5+fig17` directory with scripts to reproduce Table 5 and Figure 17 in the paper, cd to `tab5+fig17` and refer to `README`
 
 
 ### Compilation instructions
@@ -116,7 +120,7 @@ If you can successfully run fio, you are ready!
 You are welcome to clone and compile the following applications,
 which are applications we modified for cinterrupts.
 
-- FIO
+- FIO (just run `build-fio.sh` script in the top-level directory)
 - RocksDB
 - KVell
 

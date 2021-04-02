@@ -1,0 +1,13 @@
+test_nortlm.sh		-- generates unlimited workload and
+			   save raw data results in `results-raw-nortlm` directory
+test_rtlm.sh		-- generates ratelimited workload and
+			   save raw data results in `results-raw-rtlm` directory
+parse-1-nortlm.sh 	-- parses raw data results of unlimited workload, generates averages
+			   and save results in `results-nortlm` directory
+parse-1-rtlm.sh 	-- parses raw data results of ratelimited workload, generates averages
+			   and save results in `results-rtlm` directory
+parse-2.sh		-- parses averages and generates data for gnuplot (fig10.gp) 
+gnuplot fig14.gp	-- gnuplot script that generates eps figure (fig10.eps)
+make-all.sh		-- do all of the above
+
+

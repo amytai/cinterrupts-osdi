@@ -14,9 +14,13 @@ Our system works closely with real hardware and reproduction
 of our results requires a low latency Intel Optane NVMe SSD (or similar).
 In addition, we wrote our scripts with an assumption that underlying SSD
 is connected to a NUMA node `#1` which hosts cores `1,3,5,7`.
-Different configuration will require to update our scripts accordingly.
+Different configuration will require updating our scripts accordingly.
+Furthermore, in our experience, different CPUs and machine setups
+require different macrobenchmark (application) configurations
+to saturate the CPU.
 This is why we provide evaluators with an access to our setup with
 Intel Optane NVMe SSD installed and preconfigured building environment.
+
 Please contact authors how to access this setup remotely.
 (Account username/password and machine IPs are privileged information
 that we prefer to send out-of-band.)

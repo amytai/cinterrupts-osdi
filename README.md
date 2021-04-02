@@ -27,6 +27,7 @@ TODO: information on how to access the machines.
 * `utils` directory with scripts we use in our project
 * `fig5` directory with scripts to reproduce Figure 5 in the paper, cd to `fig5` and run `make-all.sh`, see `fig5.pdf`
 * `fig6` directory with scripts to reproduce Figure 6 in the paper, cd to `fig6` and run `make-all.sh`, see `fig6.pdf`
+* `fig7` directory with scripts to reproduce Figure 7 in the paper, cd to `fig7` and run `make-all.sh`, see `fig7.pdf`
 * `fig10` directory with scripts to reproduce Figure 10 in the paper, cd to `fig10` and run `make-all.sh`, see `fig10.pdf`
 * `fig14` directory with scripts to reproduce Figure 14 in the paper, cd to `fig14` and run `make-all.sh`, see `fig14.pdf`
 * `fig15` directory with scripts to reproduce Figure 15 in the paper, cd to `fig15` and refer to `README`

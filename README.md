@@ -32,7 +32,7 @@ that we prefer to send out-of-band.)
 * `linux-kernel/linux-kernel-5.0.0-16.17.tgz-part-a[abcd]` split archive of the Linux vanilla kernel ver 5.0.0-16.17
 * `linux-kernel/config-file` config file used for our kernel compilation
 * `build-kernel.sh` script to extract Linux kernels source, apply the cinterrupts patch and compile the kernel
-* `fio` directory with fio 3.13 sources and cinterrupt patch for fio
+* `fio` directory with fio 3.12 sources and cinterrupt patch for fio
 * `fio/fio-3.12.tgz` sources of original fio version 3.12
 * `fio/fio-3.12-barrier.patch` patch with cinterrupts support in fio + additional statistics added to fio as we used these in our results analysis
 * `build-fio.sh` script to extract fio source, apply cinterrupts patch and compile the fio

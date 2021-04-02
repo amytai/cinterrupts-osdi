@@ -10,8 +10,16 @@ However, due to needing the cinterrupts custom kernel, we have set up
 an environment for the evaluators on our machine.
 
 #### Accessing the evaluation environment
-Please contact authors how to access the setup with installed hardware and preconfigured building environment.
-(Account username/password and machine IPs are privileged information that we prefer to send out-of-band.)
+Our system works closely with real hardware and reproduction
+of our results requires a low latency Intel Optane NVMe SSD (or similar).
+In addition, we wrote our scripts with an assumption that underlying SSD
+is connected to a NUMA node `#1` which hosts cores `1,3,5,7`.
+Different configuration will require to update our scripts accordingly.
+This is why we provide evaluators with an access to our setup with
+Intel Optane NVMe SSD installed and preconfigured building environment.
+Please contact authors how to access this setup remotely.
+(Account username/password and machine IPs are privileged information
+that we prefer to send out-of-band.)
 
 ### Content of the repository
 * `linux-kernel` directory with Linux kernel sources and cinterrupts patch

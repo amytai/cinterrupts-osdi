@@ -5,5 +5,5 @@ fig="fig7"
 ./test.sh
 ./parse.sh
 ./parse-csv.sh
-./$fig.gp
+gnuplot ./$fig.gp
 ps2pdf $fig.eps

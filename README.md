@@ -7,17 +7,17 @@ to appear in OSDI '21 (see the paper PDF in the top-level of this repository).
 At the end of this document, we describe how to compile and install
 the evaluation environment, should the evaluator choose to do so.
 However, due to needing the cinterrupts custom kernel, we have set up
-an environment for the evalutors on our machines.
+an environment for the evaluators on our machine.
 
 #### Accessing the evaluation environment
-TODO: information on how to access the machines.
+Please contact authors how to access the setup with installed hardware and preconfigured building environment.
 
 
 ### Content of the repository
 * `linux-kernel` directory with Linux kernel sources and cinterrupts patch
 * `linux-kernel/cinterrupts-01-basis.patch` device emulation and nvme driver
 * `linux-kernel/cinterrupts-02-rocks-addon.patch` addition for multi queue support for rocksdb and other macrobenchmarks
-* `linux-kernel/linux-kernel-5.0.0-16.17.tgz-part-a[abcd]` splitted archive of the Linux vanilla kernel ver 5.0.0-16.17
+* `linux-kernel/linux-kernel-5.0.0-16.17.tgz-part-a[abcd]` split archive of the Linux vanilla kernel ver 5.0.0-16.17
 * `linux-kernel/config-file` config file used for our kernel compilation
 * `build-kernel.sh` script to extract Linux kernels source, apply the cinterrupts patch and compile the kernel
 * `fio` directory with fio 3.13 sources and cinterrupt patch for fio
@@ -47,7 +47,7 @@ it is likely because one of these packages is missing.
 
 Run `build-kernel.sh` in the top-level directory of this repository.
 This will build and install our custom kernels for micro and macro
-bechmarks. You will then need to run this script once. To simplify artifact
+benchmarks. You will then need to run this script once. To simplify artifact
 testing we already ran this script which extracted, compiled and installed
 our kernels into `linux-kernel/linux-kernel-5.0.0-16.17-nvmecint` and
 `linux-kernel/linux-kernel-5.0.0-16.17-nvmecint-rocks` directories.
@@ -131,4 +131,9 @@ reproducing the key figures in our paper, e.g., `fig5` directory
 contain all scripts needed to reproduce `Figure 5` in the paper.
 Enter to a figX directory and run `make-all.sh` script.
 See `figX.pdf` with test results.
+
+> Pay attention, our scripts run each benchmark 10 times, 60 seconds each run.
+> Since there are multiple flavours of each test the total runtime
+> can be very long. To reduce total runtime evaluators can
+> change `runtime` and `runs` variables in the test scripts.
 

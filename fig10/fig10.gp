@@ -1,7 +1,7 @@
 fontsiz = 18
 smallfontsiz = 13
 set terminal postscript eps color enhanced fontsiz;
-set output 'fi10.eps'
+set output 'fig10.eps'
 infile = 'fig10.txt'
 # set datafile separator comma
 

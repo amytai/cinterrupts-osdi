@@ -8,6 +8,6 @@ fig="fig10"
 ./parse-1-rtlm.sh
 ./parse-2.sh
 
-gnuplot "$fig"
+gnuplot "$fig".gp
 ps2pdf "$fig".eps
 

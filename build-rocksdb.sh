@@ -15,6 +15,7 @@ echo "Applying patch"
 patch -p1 < ../$patch
 
 echo "Compile rocksdb"
+./make_script.sh
 
 popd
 popd
